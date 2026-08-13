@@ -3,8 +3,8 @@ name: Build Signed Release
 on:
   push:
     tags:
-      - 'v*' # Trigger on version tags (e.g., v1.0.0)
-  workflow_dispatch: # Allow manual trigger
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   build:
@@ -21,7 +21,7 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: zulu
           java-version: '17'
 
       - name: Setup Gradle
@@ -33,7 +33,7 @@ jobs:
         env:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: |
-          echo $SIGNING_KEY | base64 -d > ./app/release.keystore
+          echo "$SIGNING_KEY" | base64 -d > ./app/release.keystore
 
       - name: Build Release APK
         env:
@@ -52,9 +52,9 @@ jobs:
           path: app/build/outputs/apk/stable/release/*.apk
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           files: app/build/outputs/apk/stable/release/*.apk
-          token: ${{ secrets.MY_PAT_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}

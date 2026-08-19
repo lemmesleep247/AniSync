@@ -1,5 +1,6 @@
 package com.anisync.android.presentation.components
 
+import android.content.Context
 import android.content.Intent
 import android.view.LayoutInflater
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -13,7 +14,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -70,6 +75,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -78,6 +84,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
+import androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
@@ -105,6 +112,9 @@ internal const val DEFAULT_VIDEO_ASPECT = 16f / 9f
 
 /** How long the controls linger after the last interaction before fading, while playing. */
 private const val CONTROLS_HIDE_DELAY_MS = 3000L
+
+/** Surface width past which the controls step up to tablet-sized touch targets. */
+private val WIDE_CONTROLS_MIN_WIDTH = 600.dp
 
 /**
  * An inline video player for the short, looping, user-embedded clips that appear in rich text
@@ -137,12 +147,15 @@ private const val CONTROLS_HIDE_DELAY_MS = 3000L
 fun VideoPlayer(
     url: String,
     modifier: Modifier = Modifier,
-    playerCache: ExoPlayerCache? = LocalExoPlayerCache.current
+    playerCache: ExoPlayerCache? = LocalExoPlayerCache.current,
+    startMuted: Boolean = true,
+    loop: Boolean = true,
+    autoPlay: Boolean = false
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    var isMuted by remember { mutableStateOf(true) }
+    var isMuted by remember { mutableStateOf(startMuted) }
     var isPlaying by remember { mutableStateOf(false) }
     var positionMs by remember { mutableLongStateOf(0L) }
     var durationMs by remember { mutableLongStateOf(0L) }
@@ -161,7 +174,7 @@ fun VideoPlayer(
     val exoPlayer = if (playerCache != null) {
         remember(url) { playerCache.getOrCreate(url) }
     } else {
-        remember(url) { buildVideoExoPlayer(context.applicationContext, url) }
+        remember(url) { buildVideoExoPlayer(context.applicationContext, url, startMuted, loop, autoPlay) }
     }
 
     DisposableEffect(exoPlayer) {
@@ -191,7 +204,7 @@ fun VideoPlayer(
                     error
                 )
                 playerState = PlayerState.Error
-                errorMessage = playbackErrorMessage(error)
+                errorMessage = playbackErrorMessage(context, error)
             }
         }
 
@@ -280,7 +293,9 @@ fun VideoPlayer(
             .fillMaxWidth()
             .aspectRatio(displayAspect)
             .clip(RoundedCornerShape(24.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            // Black, not a surface tint: any letterboxing a clip's aspect leaves should read as
+            // part of the picture rather than a pale frame around it.
+            .background(Color.Black)
     ) {
         if (playerState != PlayerState.Error) {
             PlayerSurface(
@@ -329,18 +344,53 @@ internal fun mapPlaybackState(playbackState: Int, current: PlayerState): PlayerS
 }
 
 /** Friendly, user-facing copy for a playback failure. */
-internal fun playbackErrorMessage(error: PlaybackException): String = when (error.errorCode) {
-    PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
-    PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ->
-        "Network error — check your connection"
-    PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND,
-    PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ->
-        "This video is no longer available"
-    PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
-    PlaybackException.ERROR_CODE_DECODING_FAILED ->
-        "Unsupported video format"
-    else -> "Unable to play this video"
+internal fun playbackErrorMessage(context: Context, error: PlaybackException): String {
+    val status = error.httpStatusCode()
+    val messageRes = when {
+        status == HTTP_TOO_MANY_REQUESTS -> R.string.player_error_rate_limited
+        status != null && status >= 500 -> R.string.player_error_server
+        status == HTTP_NOT_FOUND || status == HTTP_GONE -> R.string.player_error_missing
+
+        else -> when (error.errorCode) {
+            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ->
+                R.string.player_error_network
+
+            PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND -> R.string.player_error_missing
+
+            // The host answered with something that is not video, which in practice is an
+            // error page from a struggling CDN rather than a dead file.
+            PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE,
+            PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> R.string.player_error_server
+
+            PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+            PlaybackException.ERROR_CODE_DECODING_FAILED -> R.string.player_error_format
+
+            else -> R.string.player_error_generic
+        }
+    }
+    return context.getString(messageRes)
 }
+
+/**
+ * The HTTP status behind a playback failure, when there was one.
+ *
+ * Media3 reports a 503 and a 404 under codes that read alike, so the status is what separates
+ * "the host is down, wait" from "this file is gone, do not bother waiting". It sits on the
+ * cause chain rather than the exception itself.
+ */
+private fun PlaybackException.httpStatusCode(): Int? {
+    var cause: Throwable? = this
+    while (cause != null) {
+        if (cause is InvalidResponseCodeException) return cause.responseCode
+        cause = cause.cause
+    }
+    return null
+}
+
+private const val HTTP_TOO_MANY_REQUESTS = 429
+private const val HTTP_NOT_FOUND = 404
+private const val HTTP_GONE = 410
 
 /**
  * The native video surface. [active] hands the shared [exoPlayer] to exactly one surface at a time
@@ -417,42 +467,63 @@ internal fun PlayerStatusVisuals(
                     .background(MaterialTheme.colorScheme.surfaceContainerHighest),
                 contentAlignment = Alignment.Center
             ) {
+                // The player is locked to the clip's aspect ratio, so this column has to fit a
+                // box it does not control. It scrolls rather than clipping, which is what used
+                // to cut the retry button in half once a message ran to two lines.
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
-                    modifier = Modifier.padding(24.dp)
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 14.dp)
                 ) {
                     Surface(
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.errorContainer,
-                        modifier = Modifier.size(56.dp)
+                        modifier = Modifier.size(44.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = Icons.Rounded.BrokenImage,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onErrorContainer,
-                                modifier = Modifier.size(28.dp)
+                                modifier = Modifier.size(22.dp)
                             )
                         }
                     }
 
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(10.dp))
 
                     Text(
-                        text = errorMessage ?: "Unable to play this video",
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = errorMessage ?: stringResource(R.string.player_error_generic),
+                        style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
+                        textAlign = TextAlign.Center,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
                     )
 
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(10.dp))
 
-                    FilledTonalButton(onClick = onRetry, shape = RoundedCornerShape(100)) {
-                        Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.size(8.dp))
-                        Text(text = stringResource(R.string.retry), fontWeight = FontWeight.SemiBold)
+                    FilledTonalButton(
+                        onClick = onRetry,
+                        shape = RoundedCornerShape(100),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.size(6.dp))
+                        Text(
+                            text = stringResource(R.string.retry),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
                     }
                 }
             }
@@ -502,7 +573,27 @@ internal fun VideoControlsOverlay(
     val poke: () -> Unit = { interactions++ }
     val fraction = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
 
-    Box(modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        // Controls are laid out against the surface they sit on, not the device: a tablet's
+        // fullscreen video is two to three times the width of a phone's, and phone-sized touch
+        // targets look stranded on it.
+        val wide = maxWidth >= WIDE_CONTROLS_MIN_WIDTH
+        val buttonSize = if (wide) 56.dp else 40.dp
+        val buttonIconSize = if (wide) 28.dp else 20.dp
+        val playSize = when {
+            wide -> 96.dp
+            isFullscreen -> 72.dp
+            else -> 64.dp
+        }
+        val playIconSize = when {
+            wide -> 48.dp
+            isFullscreen -> 36.dp
+            else -> 30.dp
+        }
+        val edgePadding = if (wide) 20.dp else 12.dp
+        val timeStyle = if (wide) MaterialTheme.typography.titleSmall
+        else MaterialTheme.typography.labelSmall
+
         // Tap layer: toggles control visibility (sits below the controls, which consume their own taps).
         Box(
             modifier = Modifier
@@ -540,14 +631,14 @@ internal fun VideoControlsOverlay(
                         modifier = Modifier
                             .align(Alignment.TopStart)
                             .statusBarsPadding()
-                            .padding(12.dp)
-                            .size(40.dp)
+                            .padding(edgePadding)
+                            .size(buttonSize)
                     ) {
                         IconButton(onClick = { poke(); onBack() }) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = stringResource(R.string.back),
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(buttonIconSize)
                             )
                         }
                     }
@@ -561,15 +652,15 @@ internal fun VideoControlsOverlay(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .then(if (isFullscreen) Modifier.statusBarsPadding() else Modifier)
-                        .padding(12.dp)
-                        .size(40.dp)
+                        .padding(edgePadding)
+                        .size(buttonSize)
                 ) {
                     IconButton(onClick = { poke(); onToggleMute() }) {
                         Crossfade(targetState = isMuted, label = "mute_crossfade") { muted ->
                             Icon(
                                 imageVector = if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
                                 contentDescription = if (muted) stringResource(R.string.unmute) else stringResource(R.string.mute),
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(buttonIconSize)
                             )
                         }
                     }
@@ -583,14 +674,14 @@ internal fun VideoControlsOverlay(
                         contentColor = Color.White,
                         modifier = Modifier
                             .align(Alignment.Center)
-                            .size(if (isFullscreen) 72.dp else 64.dp)
+                            .size(playSize)
                     ) {
                         IconButton(onClick = { poke(); onPlayPause() }, modifier = Modifier.fillMaxSize()) {
                             Crossfade(targetState = isPlaying, label = "playpause_crossfade") { playing ->
                                 Icon(
                                     imageVector = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                                     contentDescription = if (playing) stringResource(R.string.cd_pause) else stringResource(R.string.cd_play),
-                                    modifier = Modifier.size(if (isFullscreen) 36.dp else 30.dp)
+                                    modifier = Modifier.size(playIconSize)
                                 )
                             }
                         }
@@ -603,12 +694,12 @@ internal fun VideoControlsOverlay(
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .then(if (isFullscreen) Modifier.navigationBarsPadding() else Modifier)
-                        .padding(start = 12.dp, end = 4.dp, bottom = 4.dp),
+                        .padding(start = edgePadding, end = edgePadding / 3, bottom = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = formatTime(positionMs),
-                        style = MaterialTheme.typography.labelSmall,
+                        style = timeStyle,
                         color = Color.White
                     )
 
@@ -619,7 +710,7 @@ internal fun VideoControlsOverlay(
                         thumb = {
                             SliderDefaults.Thumb(
                                 interactionSource = remember { MutableInteractionSource() },
-                                thumbSize = DpSize(12.dp, 12.dp),
+                                thumbSize = if (wide) DpSize(16.dp, 16.dp) else DpSize(12.dp, 12.dp),
                                 colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary)
                             )
                         },
@@ -629,13 +720,13 @@ internal fun VideoControlsOverlay(
                         ),
                         modifier = Modifier
                             .weight(1f)
-                            .padding(horizontal = 8.dp)
-                            .height(32.dp)
+                            .padding(horizontal = if (wide) 12.dp else 8.dp)
+                            .height(if (wide) 40.dp else 32.dp)
                     )
 
                     Text(
                         text = formatTime(durationMs),
-                        style = MaterialTheme.typography.labelSmall,
+                        style = timeStyle,
                         color = Color.White
                     )
 
@@ -646,7 +737,7 @@ internal fun VideoControlsOverlay(
                             imageVector = if (isFullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
                             contentDescription = if (isFullscreen) stringResource(R.string.cd_exit_fullscreen) else stringResource(R.string.cd_fullscreen),
                             tint = Color.White,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(if (wide) 28.dp else 22.dp)
                         )
                     }
                 }

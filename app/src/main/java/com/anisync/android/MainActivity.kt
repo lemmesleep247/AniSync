@@ -13,6 +13,7 @@ import android.util.Log
 import android.view.View
 import android.view.animation.DecelerateInterpolator
 import android.widget.Toast
+import androidx.compose.ui.res.stringResource
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -32,6 +33,7 @@ import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.AlertDialog
+import com.anisync.android.R
 import com.anisync.android.presentation.components.AppCircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -63,6 +65,7 @@ import com.anisync.android.data.update.UpdateState
 import com.anisync.android.domain.LinkPreviewProvider
 import com.anisync.android.presentation.MainScreen
 import com.anisync.android.presentation.login.LoginScreen
+import com.anisync.android.presentation.onboarding.OnboardingScreen
 import com.anisync.android.presentation.settings.UpdateDialog
 import com.anisync.android.presentation.util.LocalAdaptiveInfo
 import com.anisync.android.presentation.util.LocalStatusBarColor
@@ -175,6 +178,18 @@ class MainActivity : AppCompatActivity() {
 
             handleAuthRedirect(intent)
             routeAccountDeepLink(intent)
+
+            // Upgraders already have an account, so the first-run flow has nothing to tell them.
+            // Backfilling here (not from a default) keeps the flag meaning "has been through it"
+            // rather than "was installed after the flag existed". Anyone who has already opened the
+            // flow is excluded: they signed in through it, and a crash or a swipe-away mid-run must
+            // resume the remaining steps rather than silently count as finished.
+            if (!appSettings.onboardingCompleted.value &&
+                !appSettings.onboardingStarted &&
+                accountManager.activeAccount.value != null
+            ) {
+                appSettings.completeOnboarding()
+            }
 
             // Resolve a migrated legacy login + claim its pre-ownerId library rows for the account.
             lifecycleScope.launch(Dispatchers.IO) {
@@ -293,6 +308,16 @@ class MainActivity : AppCompatActivity() {
                           // publishes a tone, the protection Spacer below reads it. The Spacer is a
                           // sibling of the content, so a CompositionLocal bridges the two subtrees.
                           val statusBarColor = remember { mutableStateOf(Color.Unspecified) }
+
+                          // First run, or a Developer Tools replay, takes the whole window: the
+                          // sign-in handoff is the flow's own first step, and its artwork runs under
+                          // the status bar. So it opts out of both the inset padding and the
+                          // status-bar protection strip below, and handles its own insets per step.
+                          val onboardingCompleted by appSettings.onboardingCompleted
+                              .collectAsStateWithLifecycle()
+                          val onboardingReplay by appSettings.onboardingReplay
+                              .collectAsStateWithLifecycle()
+                          val onboardingActive = !onboardingCompleted || onboardingReplay
                           CompositionLocalProvider(LocalStatusBarColor provides statusBarColor) {
                           Box(modifier = Modifier.fillMaxSize()) {
                           // Keep all content out from under the system status bar: pad it down by the
@@ -301,7 +326,13 @@ class MainActivity : AppCompatActivity() {
                           Box(
                               modifier = Modifier
                                   .fillMaxSize()
-                                  .windowInsetsPadding(WindowInsets.statusBars)
+                                  .then(
+                                      if (onboardingActive) {
+                                          Modifier
+                                      } else {
+                                          Modifier.windowInsetsPadding(WindowInsets.statusBars)
+                                      }
+                                  )
                           ) {
                             // Cold Flow — seed from the account store so a logged-in cold start
                             // doesn't flash LoginScreen for a frame.
@@ -327,13 +358,13 @@ class MainActivity : AppCompatActivity() {
                                             contentDescription = null
                                         )
                                     },
-                                    title = { Text("Session Expired") },
+                                    title = { Text(stringResource(R.string.session_expired_title)) },
                                     text = {
-                                        Text("Your session has expired. Please log in again to continue using AniSync.")
+                                        Text(stringResource(R.string.session_expired_message))
                                     },
                                     confirmButton = {
                                         TextButton(onClick = { showSessionExpiredDialog = false }) {
-                                            Text("OK")
+                                            Text(stringResource(R.string.ok))
                                         }
                                     }
                                 )
@@ -355,7 +386,11 @@ class MainActivity : AppCompatActivity() {
                                 }
                             }
 
-                            if (isLoggedIn) {
+                            // Signing out later returns to the plain LoginScreen — onboarding is
+                            // a one-time introduction, not a login gate.
+                            if (onboardingActive) {
+                                OnboardingScreen()
+                            } else if (isLoggedIn) {
                                 key(sessionEpoch) {
                                     MainScreen(builtAtEpoch = sessionEpoch)
                                 }
@@ -393,17 +428,19 @@ class MainActivity : AppCompatActivity() {
                             // M3 status-bar protection: an opaque bar filling the status-bar strip
                             // (surfaceContainer, per the Android system-bars guidance), drawn above the
                             // padded content so nothing shows under the system status bar.
-                            Spacer(
-                                modifier = Modifier
-                                    .align(Alignment.TopCenter)
-                                    .fillMaxWidth()
-                                    .windowInsetsTopHeight(WindowInsets.statusBars)
-                                    .background(
-                                        statusBarColor.value.takeOrElse {
-                                            MaterialTheme.colorScheme.surfaceContainer
-                                        }
-                                    )
-                            )
+                            if (!onboardingActive) {
+                                Spacer(
+                                    modifier = Modifier
+                                        .align(Alignment.TopCenter)
+                                        .fillMaxWidth()
+                                        .windowInsetsTopHeight(WindowInsets.statusBars)
+                                        .background(
+                                            statusBarColor.value.takeOrElse {
+                                                MaterialTheme.colorScheme.surfaceContainer
+                                            }
+                                        )
+                                )
+                            }
 
                             // App-lock privacy gate: drawn above the content AND the status-bar strip
                             // so nothing shows while locked. No-op when the feature is off/unlocked.

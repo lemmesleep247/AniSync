@@ -12,8 +12,9 @@ import com.anisync.android.domain.Result
 import com.anisync.android.type.ActivityType
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.Optional
-import com.apollographql.apollo.cache.normalized.FetchPolicy
-import com.apollographql.apollo.cache.normalized.fetchPolicy
+import com.apollographql.cache.normalized.FetchPolicy
+import com.apollographql.cache.normalized.doNotStore
+import com.apollographql.cache.normalized.fetchPolicy
 import javax.inject.Inject
 
 class FeedRepositoryImpl @Inject constructor(
@@ -52,6 +53,7 @@ class FeedRepositoryImpl @Inject constructor(
                 )
             )
             .fetchPolicy(FetchPolicy.NetworkOnly)
+            .doNotStore(true)
             .execute()
 
         if (response.hasErrors()) {

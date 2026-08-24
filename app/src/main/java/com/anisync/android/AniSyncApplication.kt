@@ -1,11 +1,13 @@
 package com.anisync.android
 
 import android.app.Application
+import android.content.ComponentCallbacks2
 import android.os.Process
 import android.util.Log
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.hilt.work.HiltWorkerFactory
 import com.anisync.android.data.AppSettings
+import com.anisync.android.presentation.components.ExoPlayerCache
 import androidx.work.Configuration
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -39,6 +41,9 @@ class AniSyncApplication : Application(), Configuration.Provider, ImageLoaderFac
 
     @Inject
     lateinit var appLockManager: com.anisync.android.data.security.AppLockManager
+
+    @Inject
+    lateinit var updateManager: com.anisync.android.data.update.UpdateManager
 
     private val applicationScope = CoroutineScope(
         SupervisorJob() + CoroutineExceptionHandler { _, throwable ->
@@ -84,6 +89,10 @@ class AniSyncApplication : Application(), Configuration.Provider, ImageLoaderFac
                 scheduleWorkersBackground()
             }
             Log.d("PerfMetrics", "Background Worker scheduling took $backgroundInitTime ms")
+
+            // An update APK is only wanted between its download finishing and the install tap,
+            // and the app is not restarted in between. Anything still here is dead weight.
+            updateManager.cleanUpDownloads()
         }
 
         // Keep AniList account options (adult-content, languages, score format, …) in sync with the
@@ -129,9 +138,13 @@ class AniSyncApplication : Application(), Configuration.Provider, ImageLoaderFac
         val workManager = WorkManager.getInstance(this@AniSyncApplication)
 
         // Schedule Airing Updates
+        // Six hourly, not hourly. The query window is bucketed to the start of the day, so an
+        // hourly run refetched three pages of near-identical data twenty four times over, and the
+        // countdown users actually see is computed locally from each episode's airingAt. Episode
+        // notifications do not read this table, they fetch their own.
         val airingRequest =
             PeriodicWorkRequestBuilder<com.anisync.android.worker.AiringScheduleWorker>(
-                1, TimeUnit.HOURS
+                6, TimeUnit.HOURS
             )
                 .setConstraints(networkConstraints)
                 .build()
@@ -175,5 +188,36 @@ class AniSyncApplication : Application(), Configuration.Provider, ImageLoaderFac
             ExistingPeriodicWorkPolicy.KEEP,
             updateCheckRequest
         )
+
+        // Nothing evicts the normalized cache on its own.
+        com.anisync.android.worker.CacheMaintenanceWorker.schedule(this@AniSyncApplication)
+    }
+
+    /**
+     * Hands memory back when the system asks for it. Nothing used to listen, so the two largest
+     * in-memory holdings, decoded bitmaps and prepared players, survived every trim until the
+     * process was killed outright.
+     *
+     * Bitmaps go first because they are pure cache and cost only a re-decode. Players are only
+     * released once the app is off screen or the pressure is severe, since dropping them mid-scroll
+     * would restart playback the user is watching.
+     */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+
+        // Matched on the documented states rather than compared numerically, because the
+        // constants are not ordered by severity: BACKGROUND is 40 while RUNNING_CRITICAL is 15.
+        when (level) {
+            ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> imageLoader.memoryCache?.clear()
+
+            ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL,
+            ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN,
+            ComponentCallbacks2.TRIM_MEMORY_BACKGROUND,
+            ComponentCallbacks2.TRIM_MEMORY_MODERATE,
+            ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> {
+                imageLoader.memoryCache?.clear()
+                ExoPlayerCache.releaseAllCaches()
+            }
+        }
     }
 }

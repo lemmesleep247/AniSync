@@ -735,7 +735,7 @@
     <string name="themes_open_source">Open on AnimeThemes</string>
     <string name="themes_attribution">Theme data and video from AnimeThemes.moe</string>
     <string name="themes_actions_label">Elsewhere</string>
-    <string name="themes_action_youtube">YouTube</string>
+    <string name="themes_action_youtube" translatable="false">YouTube</string>
     <string name="themes_action_animethemes">AnimeThemes</string>
     <string name="themes_action_share">Share</string>
     <string name="themes_share_subject">%1$s by %2$s</string>
@@ -921,7 +921,7 @@
     <string name="a11y_widget_open_discover">Open Discover</string>
     <string name="a11y_widget_type_anime">Show anime</string>
     <string name="a11y_widget_type_manga">Show manga</string>
-    <string name="a11y_widget_day">%1$s %2$d</string>
+    <string name="a11y_widget_day" translatable="false">%1$s %2$d</string>
     <string name="a11y_widget_day_selected">%1$s %2$d, selected</string>
     <string name="a11y_widget_up_next_row">%1$s, episode %2$d, %3$s</string>
     <string name="a11y_widget_airing_row">%1$s, episode %2$d, airs at %3$s</string>
@@ -986,12 +986,12 @@
     <!-- Activity history: week breakdown -->
     <string name="statistics_activity_period_month">Month</string>
     <string name="statistics_activity_period_week">Week</string>
-    <string name="statistics_activity_week_range">%1$s – %2$s</string>
+    <string name="statistics_activity_week_range" translatable="false">%1$s – %2$s</string>
     <string name="statistics_activity_week_current">This week</string>
     <string name="statistics_activity_week_previous">Last week</string>
     <string name="statistics_activity_per_day">%1$s / day</string>
     <string name="statistics_activity_busiest_day">Busiest day</string>
-    <string name="statistics_activity_busiest_value">%1$s · %2$d</string>
+    <string name="statistics_activity_busiest_value" translatable="false">%1$s · %2$d</string>
     <string name="statistics_activity_active_days">Active days</string>
     <string name="statistics_activity_days_counted">Days counted</string>
     <string name="statistics_activity_awaiting">Awaiting stats</string>
@@ -999,9 +999,9 @@
     <string name="statistics_activity_today_pending">Today · not counted yet</string>
     <string name="statistics_activity_vs_previous">vs last week</string>
     <string name="statistics_activity_day_ratio">%1$d of %2$d</string>
-    <string name="statistics_activity_percent_up">+%1$d%%</string>
-    <string name="statistics_activity_percent_down">-%1$d%%</string>
-    <string name="statistics_activity_no_value">—</string>
+    <string name="statistics_activity_percent_up" translatable="false">+%1$d%%</string>
+    <string name="statistics_activity_percent_down" translatable="false">-%1$d%%</string>
+    <string name="statistics_activity_no_value" translatable="false">—</string>
     <plurals name="statistics_activity_weeks_ago">
         <item quantity="one">%d week ago</item>
         <item quantity="other">%d weeks ago</item>
@@ -1015,7 +1015,7 @@
     <string name="statistics_activity_day_posted">Posted a status</string>
     <string name="cd_activity_week_previous">Previous week</string>
     <string name="cd_activity_week_next">Next week</string>
-    <string name="a11y_activity_day">%1$s: %2$s</string>
+    <string name="a11y_activity_day" translatable="false">%1$s: %2$s</string>
     <string name="a11y_activity_day_awaiting">%1$s: not counted yet</string>
 
     <!-- Accessibility: Statistics -->
@@ -1528,4 +1528,304 @@
     <string name="share_recap_completed">Completed</string>
     <string name="share_recap_top_studio">Most watched studio</string>
     <string name="share_recap_top_staff">Most read author</string>
+
+    <!-- ONBOARDING (first-run flow) -->
+    <string name="onboarding_welcome_headline">Your library,\nalways in sync.</string>
+    <string name="onboarding_welcome_body">Track anime and manga, and never miss an airing episode.</string>
+    <string name="onboarding_welcome_cta">Continue with AniList</string>
+    <string name="onboarding_welcome_new_prompt">New to AniList?</string>
+    <string name="onboarding_welcome_new_action">Create a free account</string>
+
+    <string name="onboarding_signin_title">Sign in on AniList</string>
+    <string name="onboarding_signin_domain" translatable="false">anilist.co</string>
+    <string name="onboarding_signin_body">The browser opens on AniList, you approve AniSync there, and Android hands the app back an access token.</string>
+    <string name="onboarding_signin_point_password">Your password stays with AniList</string>
+    <string name="onboarding_signin_point_token">The token is kept on this device only</string>
+    <string name="onboarding_signin_point_revoke">Revoke access any time from AniList</string>
+    <string name="onboarding_signin_open">Open AniList</string>
+    <string name="onboarding_signin_dismiss">Not now</string>
+
+    <string name="onboarding_sync_signed_in_as">SIGNED IN AS</string>
+    <string name="onboarding_sync_body">Your lists are coming over from AniList.\nThis happens once.</string>
+    <string name="onboarding_sync_card_label">BRINGING YOUR ACCOUNT OVER</string>
+    <string name="onboarding_sync_row_library">Library</string>
+    <string name="onboarding_sync_row_airing">Airing schedule</string>
+    <string name="onboarding_sync_row_notifications">Notifications</string>
+    <string name="onboarding_sync_row_widgets">Widgets</string>
+    <string name="onboarding_sync_entries">%1$d entries</string>
+    <string name="onboarding_sync_this_week">%1$d this week</string>
+    <string name="onboarding_sync_checking">Checking</string>
+    <string name="onboarding_sync_waiting">Waiting</string>
+    <string name="onboarding_sync_widgets_none">None yet</string>
+    <string name="onboarding_sync_widgets_placed">%1$d placed</string>
+    <string name="onboarding_sync_note">Everything after this refreshes quietly in the background.</string>
+
+    <string name="onboarding_continue">Continue</string>
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_step_of">STEP %1$d OF %2$d</string>
+    <string name="onboarding_state_on">On</string>
+    <string name="onboarding_state_off">Off</string>
+
+    <string name="onboarding_permissions_headline">Let it run in the background</string>
+    <string name="onboarding_permissions_body">Alerts and airing times depend on work that happens while AniSync is closed.</string>
+    <string name="onboarding_permissions_progress">%1$d of %2$d done</string>
+    <string name="onboarding_permissions_note">Change any of this later in Settings.</string>
+    <string name="onboarding_perm_alerts_title">Notifications</string>
+    <string name="onboarding_perm_alerts_body">New episodes, forum replies, mentions and follows. Also switches the alerts on inside AniSync.</string>
+    <string name="onboarding_perm_battery_title">Background refresh</string>
+    <string name="onboarding_perm_battery_body">Android sleeps idle apps. An exemption keeps checks on time.</string>
+    <string name="onboarding_perm_links_title">AniList links</string>
+    <string name="onboarding_perm_links_body">anilist.co links open in AniSync instead of the browser.</string>
+    <string name="onboarding_perm_hibernation_title">Idle app pause</string>
+    <string name="onboarding_perm_hibernation_body">Stops Android pausing AniSync after months idle.</string>
+    <string name="onboarding_perm_badge_android12" translatable="false">ANDROID 12+</string>
+    <string name="onboarding_perm_action_allow">Allow</string>
+    <string name="onboarding_perm_action_turn_off">Turn off</string>
+    <string name="onboarding_perm_action_open">Open</string>
+
+    <string name="onboarding_personalise_headline">Make it yours</string>
+    <string name="onboarding_personalise_body">Four small choices. Every one of them lives in Look and Feel afterwards.</string>
+    <string name="onboarding_personalise_accent">ACCENT</string>
+    <string name="onboarding_personalise_theme">THEME</string>
+    <string name="onboarding_personalise_titles">TITLES</string>
+    <string name="onboarding_personalise_open_on">OPEN ON</string>
+    <string name="setting_start_screen">Open on</string>
+    <string name="start_screen_last_visited">Last visited</string>
+    <string name="onboarding_personalise_note">The accent carries through cards, buttons and widgets.</string>
+    <string name="onboarding_preview_title" translatable="false">Frieren: Beyond Journey\'s End</string>
+
+    <string name="onboarding_done_headline">You\'re all set</string>
+    <string name="onboarding_done_body">Your lists are here and the alerts are armed.</string>
+    <string name="onboarding_done_pill_alerts_on">Alerts on</string>
+    <string name="onboarding_done_pill_alerts_off">Alerts off</string>
+    <string name="onboarding_done_pill_links_on">Links on</string>
+    <string name="onboarding_done_pill_links_off">Links off</string>
+    <string name="onboarding_done_widget_title">Add the Up Next widget</string>
+    <string name="onboarding_done_widget_body">One tap to the next episode.</string>
+    <string name="onboarding_done_cta">Start watching</string>
+
+    <string name="cd_anilist_logo" translatable="false">AniList</string>
+
+    <string name="dev_tools_onboarding_section">Onboarding</string>
+    <string name="dev_tools_replay_onboarding">Replay onboarding</string>
+    <string name="dev_tools_replay_onboarding_subtitle">Reopens the first-run flow over the running app. Leaving it returns you to the Library tab.</string>
+
+    <!-- Media details: tags -->
+    <string name="tags_expand">Expand</string>
+    <string name="tags_collapse">Collapse</string>
+    <string name="tags_rank_percent" translatable="false">%1$d%%</string>
+    <plurals name="tags_more">
+        <item quantity="one">+%1$d more</item>
+        <item quantity="other">+%1$d more</item>
+    </plurals>
+    <plurals name="tags_spoiler_hidden">
+        <item quantity="one">%1$d tag, tap to view</item>
+        <item quantity="other">%1$d tags, tap to view</item>
+    </plurals>
+    <plurals name="tags_spoiler_revealed">
+        <item quantity="one">%1$d tag</item>
+        <item quantity="other">%1$d tags</item>
+    </plurals>
+    <string name="a11y_tag_rank">%1$s, rank %2$d percent</string>
+    <string name="cd_tags_show_spoilers">Show spoiler tags</string>
+    <string name="cd_tags_hide_spoilers">Hide spoiler tags</string>
+
+    <!-- Session expiry dialog -->
+    <string name="ok">OK</string>
+    <string name="session_expired_title">Session Expired</string>
+    <string name="session_expired_message">Your session has expired. Please log in again to continue using AniSync.</string>
+
+    <!-- Filter sheets -->
+    <string name="reset">Reset</string>
+    <string name="done">Done</string>
+    <string name="search_tags_hint">Search tags</string>
+    <string name="forum_filter_subscribed">Subscribed</string>
+    <string name="forum_start_discussion">Start a discussion about this</string>
+
+    <!-- Content descriptions -->
+    <string name="cd_subscribe">Subscribe</string>
+    <string name="cd_unsubscribe">Unsubscribe</string>
+    <string name="cd_unsave">Unsave</string>
+    <string name="cd_unlike">Unlike</string>
+    <string name="cd_add_to_favorites">Add to favorites</string>
+    <string name="cd_remove_from_favorites">Remove from favorites</string>
+    <string name="cd_view_grid">Grid view</string>
+    <string name="cd_view_list">List view</string>
+    <string name="cd_switch_to_grid_view">Switch to grid view</string>
+    <string name="cd_switch_to_list_view">Switch to list view</string>
+    <string name="cd_expand_all">Expand all</string>
+    <string name="cd_collapse_all">Collapse all</string>
+    <string name="cd_trending_carousel">Trending carousel</string>
+    <string name="cd_clear_media_filter">Clear media filter</string>
+    <string name="cd_media_cover">Media cover</string>
+    <string name="cd_show_tab">Show tab</string>
+    <string name="cd_hide_tab">Hide tab</string>
+    <string name="cd_cover_quality_preview">Cover quality preview</string>
+    <!-- %1$s is the title of the entry being edited -->
+    <string name="a11y_editing_entry">Editing %1$s</string>
+    <!-- %1$s is the current progress, %2$s the total, or "Unknown" when no total is published -->
+    <string name="a11y_progress_of">Progress %1$s of %2$s</string>
+
+    <!-- Notifications: who acted. %1$s and %2$s are user names, %2$d a count of further users -->
+    <string name="notification_actor_someone">Someone</string>
+    <string name="notification_actors_two">%1$s and %2$s</string>
+    <plurals name="notification_actors_others">
+        <item quantity="one">%1$s and %2$d other</item>
+        <item quantity="other">%1$s and %2$d others</item>
+    </plurals>
+
+    <!-- Notifications: forum. %1$s, or %2$s in the counted forms, is the thread title -->
+    <string name="notification_thread_reply">Replied to your comment in \"%1$s\"</string>
+    <string name="notification_thread_reply_untitled">Replied to your comment</string>
+    <plurals name="notification_thread_replies">
+        <item quantity="one">%1$d new reply in \"%2$s\"</item>
+        <item quantity="other">%1$d new replies in \"%2$s\"</item>
+    </plurals>
+    <plurals name="notification_thread_replies_untitled">
+        <item quantity="one">%1$d new reply</item>
+        <item quantity="other">%1$d new replies</item>
+    </plurals>
+    <string name="notification_thread_comment">Commented in \"%1$s\"</string>
+    <string name="notification_thread_comment_untitled">Commented in a thread you are subscribed to</string>
+    <plurals name="notification_thread_comments">
+        <item quantity="one">%1$d new comment in \"%2$s\"</item>
+        <item quantity="other">%1$d new comments in \"%2$s\"</item>
+    </plurals>
+    <plurals name="notification_thread_comments_untitled">
+        <item quantity="one">%1$d new comment</item>
+        <item quantity="other">%1$d new comments</item>
+    </plurals>
+    <string name="notification_thread_mention">Mentioned you in a comment in \"%1$s\"</string>
+    <string name="notification_thread_mention_untitled">Mentioned you in a comment</string>
+    <string name="notification_liked_thread">Liked your thread \"%1$s\"</string>
+    <string name="notification_liked_thread_untitled">Liked your thread</string>
+    <string name="notification_liked_comment">Liked your comment in \"%1$s\"</string>
+    <string name="notification_liked_comment_untitled">Liked your comment</string>
+
+    <!-- Notifications: activity feed. %1$s is one of the notification_kind_* nouns below -->
+    <string name="notification_activity_reply">Replied to your %1$s</string>
+    <plurals name="notification_activity_replies">
+        <item quantity="one">%1$d new reply to your %2$s</item>
+        <item quantity="other">%1$d new replies to your %2$s</item>
+    </plurals>
+    <string name="notification_activity_reply_subscribed">Replied to a post you are subscribed to</string>
+    <plurals name="notification_activity_replies_subscribed">
+        <item quantity="one">%1$d new reply to a post you are subscribed to</item>
+        <item quantity="other">%1$d new replies to a post you are subscribed to</item>
+    </plurals>
+    <string name="notification_activity_mention">Mentioned you in %1$s</string>
+    <string name="notification_activity_like">Liked your %1$s</string>
+    <string name="notification_activity_reply_like">Liked your reply</string>
+    <string name="notification_activity_message">Sent you a message</string>
+    <plurals name="notification_activity_messages">
+        <item quantity="one">%1$d new message</item>
+        <item quantity="other">%1$d new messages</item>
+    </plurals>
+    <string name="notification_following">Started following you</string>
+
+    <!-- Notifications: the kind of post a notification points at, substituted into the lines above -->
+    <string name="notification_kind_status">status update</string>
+    <string name="notification_kind_anime_list">anime list update</string>
+    <string name="notification_kind_manga_list">manga list update</string>
+    <string name="notification_kind_message">message</string>
+    <string name="notification_kind_post">post</string>
+    <!-- The same nouns with an indefinite article, for "Mentioned you in a status update" -->
+    <string name="notification_kind_status_indefinite">a status update</string>
+    <string name="notification_kind_anime_list_indefinite">an anime list update</string>
+    <string name="notification_kind_manga_list_indefinite">a manga list update</string>
+    <string name="notification_kind_message_indefinite">a message</string>
+    <string name="notification_kind_post_indefinite">a post</string>
+
+    <!-- Notifications: tray summary for stacked social notifications -->
+    <string name="notification_social_summary_title">New activity</string>
+    <plurals name="notification_social_summary_count">
+        <item quantity="one">%1$d notification</item>
+        <item quantity="other">%1$d notifications</item>
+    </plurals>
+
+    <!-- Notifications: airing episodes -->
+    <string name="notification_episode_title_fallback">New episode</string>
+    <string name="notification_episode_aired">Episode %1$d has aired</string>
+    <!-- %1$s is a day, one of the three strings below, and %2$s the local airing time -->
+    <string name="notification_episode_one_airs_at">Episode 1 airs %1$s at %2$s</string>
+    <string name="notification_day_today">today</string>
+    <string name="notification_day_tomorrow">tomorrow</string>
+    <!-- %1$s is a formatted date -->
+    <string name="notification_day_on_date">on %1$s</string>
+    <string name="notification_episode_one_airs_under_hour">Episode 1 airs in less than an hour</string>
+    <plurals name="notification_episode_one_airs_in_hours">
+        <item quantity="one">Episode 1 airs in about an hour</item>
+        <item quantity="other">Episode 1 airs in about %1$d hours</item>
+    </plurals>
+    <string name="notification_episode_one_available">Episode 1 is now available</string>
+    <string name="notification_action_add_to_watching">Add to Watching</string>
+    <plurals name="notification_episodes_aired_summary">
+        <item quantity="one">%1$d new episode aired</item>
+        <item quantity="other">%1$d new episodes aired</item>
+    </plurals>
+    <!-- One line of the stacked airing summary: %1$s is the title, %2$d the episode number -->
+    <string name="notification_episode_summary_line">%1$s — Episode %2$d</string>
+    <string name="notification_media_title_fallback">Anime</string>
+
+    <!-- Toasts fired from the "Add to Watching" notification action -->
+    <string name="toast_added_to_watching">Added \"%1$s\" to Watching</string>
+    <!-- %1$s is the error reported by AniList -->
+    <string name="toast_update_failed_reason">Failed to update: %1$s</string>
+    <string name="toast_update_failed">Failed to update list</string>
+
+    <!-- Relative timestamps, shown on cards and in the inbox -->
+    <string name="time_ago_just_now">just now</string>
+    <string name="time_ago_minutes">%1$dm ago</string>
+    <string name="time_ago_hours">%1$dh ago</string>
+    <string name="time_ago_days">%1$dd ago</string>
+    <string name="time_ago_weeks">%1$dw ago</string>
+    <string name="time_ago_months">%1$dmo ago</string>
+    <string name="time_ago_years">%1$dy ago</string>
+
+    <!-- Last reply line on a thread or activity card: %1$s is the user, %2$s a relative time -->
+    <string name="forum_last_by">Last by %1$s • %2$s</string>
+
+    <!-- Expandable cards -->
+    <string name="show_more">Show more</string>
+    <string name="show_less">Show less</string>
+
+    <!-- Notifications inbox: who acted, when several people did the same thing -->
+    <string name="notifications_actors_list">%1$s, %2$s and %3$s</string>
+    <plurals name="notifications_actors_tail">
+        <item quantity="one">%1$d other</item>
+        <item quantity="other">%1$d others</item>
+    </plurals>
+
+    <!-- Notifications inbox headlines. %1$s is who acted; %2$s, where present, is one of the
+         notification_kind_* nouns -->
+    <string name="notifications_item_liked_activity">%1$s liked your %2$s</string>
+    <string name="notifications_item_liked_reply">%1$s liked your reply</string>
+    <string name="notifications_item_replied_activity">%1$s replied to your %2$s</string>
+    <string name="notifications_item_replied_subscribed">%1$s replied to a post you are subscribed to</string>
+    <string name="notifications_item_mentioned_activity">%1$s mentioned you in %2$s</string>
+    <string name="notifications_item_message">%1$s sent you a message</string>
+    <string name="notifications_item_liked_thread">%1$s liked your thread</string>
+    <string name="notifications_item_liked_comment">%1$s liked your comment</string>
+    <string name="notifications_item_replied_comment">%1$s replied to your comment</string>
+    <string name="notifications_item_commented_subscribed">%1$s commented in a thread you are subscribed to</string>
+    <string name="notifications_item_mentioned_comment">%1$s mentioned you in a comment</string>
+    <string name="notifications_item_following">%1$s started following you</string>
+    <string name="notifications_item_episode">Episode %1$d</string>
+    <!-- Site-wide media changes announced by AniList moderators -->
+    <string name="notifications_item_media_added_fallback">A new title</string>
+    <string name="notifications_item_media_added_context">was added to the site</string>
+    <string name="notifications_item_media_changed_fallback">A title on your list</string>
+    <string name="notifications_item_media_changed_context">had data updated</string>
+    <string name="notifications_item_media_merged">%1$s merged into %2$s</string>
+    <string name="notifications_item_media_merged_fallback">Entries</string>
+    <string name="notifications_item_media_merged_target">another entry</string>
+    <string name="notifications_item_media_deleted">%1$s was removed from the site</string>
+    <string name="notifications_item_unknown">New notification</string>
+
+    <!-- Top alert toast -->
+    <string name="alert_rate_limit_notice">Slowing down to stay within AniList\'s rate limit…</string>
+    <string name="alert_retrying_in">Retrying in %1$ds</string>
+
+    <!-- AniList link card -->
+    <string name="link_card_view_activity">View activity</string>
 </resources>

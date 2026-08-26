@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.anisync.android.R
 import com.anisync.android.data.AppSettings
 import com.anisync.android.data.NotificationBadgeStore
 import com.anisync.android.domain.ActivityRepository
@@ -80,6 +81,16 @@ class ProfileViewModel @Inject constructor(
 
         /** Minimum gap between user-initiated refreshes (pull-to-refresh). */
         private const val GESTURE_REFRESH_COOLDOWN_MS = 5_000L
+
+        /** Extra attempts a failed own-profile load gets before the retry button is offered. */
+        private const val OWN_PROFILE_LOAD_RETRIES = 2
+
+        /**
+         * Backoff between those attempts. Short on purpose: a 429 has already cost the interceptor
+         * its own `Retry-After` wait, so a longer one here only extends the spinner instead of
+         * handing the user a button.
+         */
+        private const val OWN_PROFILE_RETRY_BASE_MS = 3_000L
     }
 
     /**
@@ -290,21 +301,29 @@ class ProfileViewModel @Inject constructor(
      */
     private var lastLoadedTargetProfile: com.anisync.android.domain.UserProfile? = null
 
+    /**
+     * Own-profile load failure, set only once the retries below are spent and Room still holds
+     * nothing for the active account. The observed profile flow can only emit null in that state,
+     * so without this the screen would sit on a spinner with no way out (#115).
+     */
+    private val ownProfileError = MutableStateFlow<Int?>(null)
+
+    /** Whether Room currently holds a profile for the active account. Read by [loadOwnProfile]. */
+    @Volatile
+    private var hasCachedOwnProfile = false
+
     private val profileState = if (targetUsername.isNullOrBlank()) {
-        getProfileUseCase()
-            .map { profileResult ->
-                if (profileResult != null) {
-                    ProfileUiState(
-                        isLoading = false,
-                        profile = profileResult
-                    )
-                } else {
-                    ProfileUiState(isLoading = true)
-                }
+        combine(getProfileUseCase(), ownProfileError) { profileResult, errorRes ->
+            when {
+                profileResult != null -> ProfileUiState(isLoading = false, profile = profileResult)
+                errorRes != null -> ProfileUiState(isLoading = false, loadErrorRes = errorRes)
+                else -> ProfileUiState(isLoading = true)
             }
+        }
             // Keep the cached account name/avatar (account switcher + AniList settings) in sync with
             // the freshly-loaded own profile, so a picture changed on AniList shows up here too.
             .onEach { state ->
+                hasCachedOwnProfile = state.profile != null
                 state.profile?.let { accountManager.updateActiveDetails(it.name, it.avatarUrl) }
             }
             .onStart { emit(ProfileUiState(isLoading = true)) }
@@ -797,10 +816,7 @@ class ProfileViewModel @Inject constructor(
                     val s = SystemClock.elapsedRealtime()
                     try {
                         if (targetUsername.isNullOrBlank()) {
-                            when (val r = profileRepository.refreshProfileTimed("", forceNetwork = forceNetwork)) {
-                                is Result.Success -> profileTimings = r.data
-                                is Result.Error -> Unit
-                            }
+                            profileTimings = loadOwnProfile(forceNetwork)
                         } else {
                             targetRefreshSignal.tryEmit(forceNetwork)
                         }
@@ -863,6 +879,44 @@ class ProfileViewModel @Inject constructor(
                 localState.update { it.copy(isRefreshing = false) }
                 Trace.endSection()
                 refreshMutex.unlock()
+            }
+        }
+    }
+
+    /**
+     * Fetches the own profile, surfacing a failure while Room holds nothing for the active account.
+     *
+     * Adding or switching an account clears the caches, so a newly activated account has no cached
+     * row and its profile flow can only emit null until a fetch lands. Swallowing the failure there
+     * left the screen spinning forever with nothing to retry from. A failure with a profile already
+     * on screen stays silent, as before.
+     *
+     * The same account change rebuilds every screen at once, so that first load arrives inside a
+     * burst AniList readily rate-limits. Retrying a few times absorbs that without the user having
+     * to do anything.
+     */
+    private suspend fun loadOwnProfile(
+        forceNetwork: Boolean
+    ): com.anisync.android.domain.ProfileRefreshTimings? {
+        ownProfileError.value = null
+        var attempt = 0
+        while (true) {
+            when (val result = profileRepository.refreshProfileTimed("", forceNetwork = forceNetwork)) {
+                is Result.Success -> return result.data
+                is Result.Error -> {
+                    Log.w("AniSyncPerf", "profile.load failed attempt=$attempt code=${result.code} msg=${result.message}")
+                    if (hasCachedOwnProfile) return null
+                    if (attempt == OWN_PROFILE_LOAD_RETRIES) {
+                        ownProfileError.value = if (result.code == 429) {
+                            R.string.profile_rate_limited_error
+                        } else {
+                            R.string.profile_unknown_error
+                        }
+                        return null
+                    }
+                    attempt++
+                    delay(OWN_PROFILE_RETRY_BASE_MS * attempt)
+                }
             }
         }
     }

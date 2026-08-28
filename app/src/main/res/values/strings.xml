@@ -563,10 +563,29 @@
     <string name="studio_label_animation_studio">Animation Studio</string>
     <string name="studio_label_other_studio">Studio</string>
     <string name="studio_label_works">Works</string>
+    <!-- Retired with the studio screen rebuild, kept until Weblate drops the translations. -->
     <string name="studio_label_total_works">Total works</string>
     <string name="studio_label_website">Website</string>
     <string name="studio_label_type">Type</string>
     <string name="studio_main_studio_chip">Main Studio</string>
+    <string name="studio_role_co_production">Co-production</string>
+    <string name="studio_stat_on_your_list">On your list</string>
+    <string name="studio_stat_average_score">Average score</string>
+    <string name="studio_stat_lead_studio">Lead studio</string>
+    <string name="studio_stat_span">Span</string>
+    <string name="studio_sort_title">Title</string>
+    <string name="studio_filter_any_format">Any format</string>
+    <string name="studio_open_on_anilist">View on AniList</string>
+    <string name="studio_empty_works">No works match these filters.</string>
+    <plurals name="studio_titles_count">
+        <item quantity="one">%d title</item>
+        <item quantity="other">%d titles</item>
+    </plurals>
+    <plurals name="studio_stats_scope">
+        <item quantity="one">Averaged over the %d title loaded so far</item>
+        <item quantity="other">Averaged over the %d titles loaded so far</item>
+    </plurals>
+    <string name="cd_studio_mark">Covers from %1$s</string>
     <string name="clip_label_external_link">External link (%1$s)</string>
 
     <string name="control_log_out">Log Out</string>
@@ -1312,6 +1331,64 @@
     <string name="label_all_languages">All Languages</string>
     <string name="label_character">Character</string>
     <string name="also_known_as">Also known as: %s</string>
+
+    <!-- Character / staff details -->
+    <string name="person_tab_appearances">Appearances</string>
+    <string name="person_tab_voice_actors">Voice actors</string>
+    <string name="person_tab_characters">Characters</string>
+    <string name="person_tab_credits">Credits</string>
+    <string name="person_favourites_label">favourites</string>
+    <string name="person_meta_titles">%1$d titles</string>
+    <string name="person_meta_role_main">Main character</string>
+    <string name="person_meta_role_supporting">Supporting character</string>
+    <string name="person_meta_voice_actor">Voice actor</string>
+    <string name="person_names_row">Names and aliases</string>
+    <string name="person_names_subtitle">%1$s · %2$d names on record</string>
+    <string name="person_names_primary">Primary</string>
+    <string name="person_names_preferred">Preferred</string>
+    <string name="person_names_romaji">Romaji</string>
+    <string name="person_names_native">Native</string>
+    <string name="person_names_alternative">Alternative</string>
+    <string name="person_names_spoilers_hidden">%1$d spoiler aliases hidden · tap to reveal</string>
+    <string name="person_names_spoilers">Spoiler aliases</string>
+    <string name="person_names_copy_all">Copy all names</string>
+    <string name="person_names_more">+%1$d more</string>
+    <string name="person_attr_gender">Gender</string>
+    <string name="person_attr_age">Age</string>
+    <string name="person_attr_blood_type">Blood type</string>
+    <string name="person_attr_birthday">Birthday</string>
+    <string name="person_attr_date_of_death">Died</string>
+    <string name="person_attr_hometown">Hometown</string>
+    <string name="person_attr_active_since">Active since</string>
+    <string name="person_attr_years_active">Years active</string>
+    <string name="person_attr_occupation">Occupation</string>
+    <string name="person_attr_language">Language</string>
+    <string name="person_voiced_by">Voiced by</string>
+    <string name="person_no_voice_cast">No voice cast</string>
+    <string name="person_voice_actor_titles">%1$s · %2$d titles</string>
+    <string name="person_media_and_more">+%1$d titles</string>
+    <plurals name="person_titles_count">
+        <item quantity="one">%1$d title</item>
+        <item quantity="other">%1$d titles</item>
+    </plurals>
+    <string name="person_filter_main_roles">Main roles</string>
+    <string name="person_filter_media_type">Media type</string>
+    <string name="person_filter_role">Role</string>
+    <string name="person_filter_any_role">Any role</string>
+    <string name="person_filter_supporting">Supporting</string>
+    <string name="person_sort_popularity">Popularity</string>
+    <string name="person_sort_newest">Newest</string>
+    <string name="person_sort_score">Score</string>
+    <string name="person_sort_favourites">Most favourited</string>
+    <string name="person_sort_name">Name</string>
+    <string name="person_sort_most_titles">Most titles</string>
+    <string name="person_credits_note_plain">Voice roles are not credits. They live in the Characters tab.</string>
+    <string name="person_empty_appearances">No appearances match these filters.</string>
+    <string name="person_empty_voice_actors">No voice actors for these filters.</string>
+    <string name="person_empty_characters">No characters match these filters.</string>
+    <string name="person_empty_credits">No production credits on AniList.</string>
+    <string name="cd_person_names">Open all names and aliases</string>
+    <string name="a11y_person_favourite">Favourite</string>
 
     <!-- Library / Lists -->
     <string name="custom_lists">Custom Lists</string>

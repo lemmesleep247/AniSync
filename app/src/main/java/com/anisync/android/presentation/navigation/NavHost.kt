@@ -716,9 +716,6 @@ fun AniSyncNavHost(
                     onMediaClick = { mediaId ->
                         navController.navigate(MediaDetails(mediaId, com.anisync.android.presentation.util.TransitionKeys.CHARACTER))
                     },
-                    onMediaSeeAllClick = { characterId, characterName ->
-                        navController.navigate(CharacterMediaGrid(characterId, characterName))
-                    },
                     onStaffClick = { staffId ->
                         navController.navigate(StaffDetails(staffId))
                     },
@@ -752,12 +749,6 @@ fun AniSyncNavHost(
                     onCharacterClick = { characterId ->
                         navController.navigate(CharacterDetails(characterId))
                     },
-                    onMediaSeeAllClick = { staffId, staffName ->
-                        navController.navigate(StaffMediaGrid(staffId, staffName))
-                    },
-                    onProductionSeeAllClick = { staffId, staffName ->
-                        navController.navigate(StaffProductionMediaGrid(staffId, staffName))
-                    },
                     sharedTransitionScope = this@SharedTransitionLayout,
                     animatedVisibilityScope = this
                 )
@@ -783,9 +774,8 @@ fun AniSyncNavHost(
                     onMediaClick = { mediaId ->
                         navController.navigate(MediaDetails(mediaId, "studio"))
                     },
-                    onMediaSeeAllClick = { studioId, studioName ->
-                        navController.navigate(StudioMediaGrid(studioId, studioName))
-                    }
+                    sharedTransitionScope = this@SharedTransitionLayout,
+                    animatedVisibilityScope = this
                 )
             }
 

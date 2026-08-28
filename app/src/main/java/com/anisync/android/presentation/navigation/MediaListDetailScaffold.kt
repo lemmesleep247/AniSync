@@ -54,6 +54,7 @@ import com.anisync.android.R
 import com.anisync.android.presentation.util.LocalAppSettings
 import com.anisync.android.presentation.util.LocalPaneIsRoot
 import com.anisync.android.presentation.util.PaneDragHandle
+import com.anisync.android.presentation.util.ContainerAdaptiveScope
 import com.anisync.android.presentation.util.PaneSheetHost
 import com.anisync.android.presentation.util.TwoPaneDefaults
 import kotlinx.coroutines.Job
@@ -304,7 +305,12 @@ fun <T : Any> TwoPaneListDetailScaffold(
                 color = TwoPaneDefaults.paneColor,
             ) {
                 PaneSheetHost {
-                    detailPane(detail) { closeDetail() }
+                    // The detail pane is the container its content should lay itself out for. A
+                    // screen that reads the window instead would take its two-pane branch inside
+                    // this pane and split it again.
+                    ContainerAdaptiveScope {
+                        detailPane(detail) { closeDetail() }
+                    }
                 }
             }
         } else if (showPlaceholder) {
@@ -472,7 +478,6 @@ internal fun NavGraphBuilder.mediaPaneGraph(
             characterId = route.characterId,
             onBackClick = { if (!paneNav.popBackStack()) onClose() },
             onMediaClick = { paneNav.navigate(MediaDetails(it, LIST_DETAIL_PANE_SOURCE)) },
-            onMediaSeeAllClick = { cId, cName -> paneNav.navigate(CharacterMediaGrid(cId, cName)) },
             onStaffClick = { paneNav.navigate(StaffDetails(it)) },
             sharedTransitionScope = sharedScope,
             animatedVisibilityScope = this,
@@ -486,10 +491,6 @@ internal fun NavGraphBuilder.mediaPaneGraph(
             onBackClick = { if (!paneNav.popBackStack()) onClose() },
             onMediaClick = { paneNav.navigate(MediaDetails(it, LIST_DETAIL_PANE_SOURCE)) },
             onCharacterClick = { paneNav.navigate(CharacterDetails(it)) },
-            onMediaSeeAllClick = { sId, sName -> paneNav.navigate(StaffMediaGrid(sId, sName)) },
-            onProductionSeeAllClick = { sId, sName ->
-                paneNav.navigate(StaffProductionMediaGrid(sId, sName))
-            },
             sharedTransitionScope = sharedScope,
             animatedVisibilityScope = this,
         )
@@ -501,7 +502,8 @@ internal fun NavGraphBuilder.mediaPaneGraph(
             studioId = route.studioId,
             onBackClick = { if (!paneNav.popBackStack()) onClose() },
             onMediaClick = { paneNav.navigate(MediaDetails(it, LIST_DETAIL_PANE_SOURCE)) },
-            onMediaSeeAllClick = { sId, sName -> paneNav.navigate(StudioMediaGrid(sId, sName)) },
+            sharedTransitionScope = sharedScope,
+            animatedVisibilityScope = this,
         )
     }
 

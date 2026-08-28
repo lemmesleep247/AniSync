@@ -596,7 +596,10 @@ class DetailsRepositoryImpl @Inject constructor(
             val charData = response.data?.Character
                 ?: throw Exception("Character not found")
 
-            val alternativeNames = charData.name?.alternative?.filterNotNull() ?: emptyList()
+            val alternativeNames = charData.name?.alternative?.filterNotNull()
+                ?.filter { it.isNotBlank() } ?: emptyList()
+            val spoilerNames = charData.name?.alternativeSpoiler?.filterNotNull()
+                ?.filter { it.isNotBlank() } ?: emptyList()
 
             val pageInfo = charData.media?.pageInfo
             val hasNextPage = pageInfo?.hasNextPage ?: false
@@ -649,6 +652,7 @@ class DetailsRepositoryImpl @Inject constructor(
                 nativeName = charData.name?.native,
                 nameUserPreferred = charData.name?.userPreferred ?: charData.name?.full ?: "Unknown",
                 alternativeNames = alternativeNames,
+                spoilerNames = spoilerNames,
                 imageUrl = charData.image?.large,
                 description = charData.description,
                 gender = charData.gender,
@@ -662,7 +666,8 @@ class DetailsRepositoryImpl @Inject constructor(
                 favourites = charData.favourites,
                 isFavourite = effectiveIsFav,
                 media = mediaList,
-                hasNextPage = hasNextPage
+                hasNextPage = hasNextPage,
+                mediaTotal = pageInfo?.total.exactConnectionTotal()
             )
         }
     }
@@ -981,7 +986,9 @@ class DetailsRepositoryImpl @Inject constructor(
                 voicedCharacters = voicedCharacters,
                 hasNextPage = hasNextPage,
                 productionMedia = productionMedia,
-                productionMediaHasNextPage = productionMediaHasNextPage
+                productionMediaHasNextPage = productionMediaHasNextPage,
+                charactersTotal = pageInfo?.total.exactConnectionTotal(),
+                productionTotal = staffData.staffMedia?.pageInfo?.total.exactConnectionTotal()
             )
         }
     }
@@ -1063,6 +1070,7 @@ class DetailsRepositoryImpl @Inject constructor(
                         node.coverImage?.large,
                         node.coverImage?.extraLarge
                     ),
+                    bannerUrl = node.bannerImage,
                     format = node.format?.name,
                     type = node.type,
                     status = node.status?.name,
@@ -1091,7 +1099,8 @@ class DetailsRepositoryImpl @Inject constructor(
                 favourites = studioData.favourites ?: 0,
                 isFavourite = effectiveIsFav,
                 media = mediaList,
-                hasNextPage = hasNextPage
+                hasNextPage = hasNextPage,
+                mediaTotal = pageInfo?.total.exactConnectionTotal()
             )
         }
     }
@@ -1261,6 +1270,17 @@ class DetailsRepositoryImpl @Inject constructor(
 
 // One edge per character, already server-ordered by the characters' own favourites
 // (FAVOURITES_DESC); edge.media carries the roles, so no client-side regrouping.
+/**
+ * AniList reports at most 500 for a nested connection's `pageInfo.total`, and it is the cap rather
+ * than the data: Mayumi Tanaka, Erica Schroeder and Renato Novara all come back as exactly 500
+ * however large their real cast lists are, at any page size (`lastPage` tracks the cap too). A total
+ * sitting on the cap therefore means "at least this many", so it is dropped instead of being shown
+ * as a count — every voice actor claiming 500 roles is worse than claiming none.
+ */
+private const val ANILIST_CONNECTION_TOTAL_CAP = 500
+
+private fun Int?.exactConnectionTotal(): Int? = this?.takeIf { it < ANILIST_CONNECTION_TOTAL_CAP }
+
 private fun StaffVoicedCharacterFields.toDomain(): VoicedCharacter? {
     val character = node ?: return null
     val charId = character.id ?: return null
@@ -1285,6 +1305,7 @@ private fun StaffVoicedCharacterFields.toDomain(): VoicedCharacter? {
                     node.coverImage?.large,
                     node.coverImage?.extraLarge
                 ),
+                bannerUrl = node.bannerImage,
                 startYear = node.startDate?.year,
                 characterRole = role?.name,
                 popularity = node.popularity,
@@ -1311,6 +1332,7 @@ private fun StaffProductionMediaFields.toDomain(): StaffProductionMedia? {
             media.coverImage?.large,
             media.coverImage?.extraLarge
         ),
+        bannerUrl = media.bannerImage,
         type = media.type,
         startYear = media.startDate?.year,
         staffRole = staffRole,

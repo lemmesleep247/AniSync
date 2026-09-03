@@ -76,6 +76,7 @@ import com.anisync.android.presentation.util.LocalLinkPreviewProvider
 import com.anisync.android.presentation.util.rememberAdaptiveInfo
 import com.anisync.android.type.MediaType
 import com.anisync.android.ui.theme.AppTheme
+import com.anisync.android.ui.theme.applySystemBarAppearance
 import com.anisync.android.ui.theme.PresetPalettes
 import com.anisync.android.ui.theme.resolveDarkTheme
 import com.anisync.android.worker.LibrarySyncWorker
@@ -158,7 +159,18 @@ class MainActivity : AppCompatActivity() {
                 duration = 260L
                 interpolator = DecelerateInterpolator()
                 addListener(object : AnimatorListenerAdapter() {
-                    override fun onAnimationEnd(animation: Animator) = splashProvider.remove()
+                    override fun onAnimationEnd(animation: Animator) {
+                        splashProvider.remove()
+                        // Both the hand-over and remove() rewrite the window's bar appearance from
+                        // the activity theme. Theme.AniSync now declares the right values, but the
+                        // theme only tracks the night qualifier — the app's own theme mode is the
+                        // authority, so it gets the last word here.
+                        applySystemBarAppearance(
+                            window,
+                            appSettings.themeMode.value
+                                .resolveDarkTheme(applicationContext.resources.configuration)
+                        )
+                    }
                 })
                 start()
             }
@@ -167,6 +179,9 @@ class MainActivity : AppCompatActivity() {
         val onCreateTime = measureTimeMillis {
             super.onCreate(savedInstanceState)
 
+            // Device-theme styling only. The app's own light/dark setting drives the bar
+            // icons through WindowInsetsControllerCompat in AppTheme, which is the
+            // mechanism the edge-to-edge guide documents for an in-app theme.
             enableEdgeToEdge()
 
             val savedLocale = appSettings.appLocale.value

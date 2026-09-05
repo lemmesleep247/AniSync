@@ -1,0 +1,153 @@
+name: Build Signed Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (for example 1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: Build Release APK
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # --------------------------------------------------
+      # Create tag when manually triggered
+      # --------------------------------------------------
+      - name: Create and push tag
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          # Validate version format
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version: $VERSION"
+            echo "Version must be in the format X.Y.Z"
+            exit 1
+          fi
+
+          TAG="v${VERSION}"
+
+          echo "Release tag: $TAG"
+
+          # Check if tag already exists
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists."
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git tag "$TAG"
+          git push origin "$TAG"
+
+      # --------------------------------------------------
+      # Determine release tag
+      # --------------------------------------------------
+      - name: Set release tag
+        id: release_tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # --------------------------------------------------
+      # Java
+      # --------------------------------------------------
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '17'
+
+      # --------------------------------------------------
+      # Gradle
+      # --------------------------------------------------
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.13
+
+      # --------------------------------------------------
+      # Decode signing keystore
+      # --------------------------------------------------
+      - name: Decode Keystore
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: |
+          echo "$SIGNING_KEY" | base64 -d > ./app/release.keystore
+
+      # --------------------------------------------------
+      # Build signed APK
+      # --------------------------------------------------
+      - name: Build Release APK
+        env:
+          KEYSTORE_FILE: release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleStableRelease
+
+      # --------------------------------------------------
+      # Rename APK
+      # --------------------------------------------------
+      - name: Rename Release APK
+        run: |
+          TAG="${{ steps.release_tag.outputs.tag }}"
+
+          APK=$(find app/build/outputs/apk/stable/release -name "*.apk" | head -n 1)
+
+          if [ -z "$APK" ]; then
+            echo "Release APK not found!"
+            exit 1
+          fi
+
+          NEW_NAME="app/build/outputs/apk/stable/release/AniSync ${TAG}.apk"
+
+          echo "Renaming:"
+          echo "$APK"
+          echo "->"
+          echo "$NEW_NAME"
+
+          mv "$APK" "$NEW_NAME"
+
+      # --------------------------------------------------
+      # Upload workflow artifact
+      # --------------------------------------------------
+      - name: Upload Release Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AniSync-${{ steps.release_tag.outputs.tag }}
+          path: app/build/outputs/apk/stable/release/AniSync *.apk
+
+      # --------------------------------------------------
+      # Create GitHub Release
+      # --------------------------------------------------
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.release_tag.outputs.tag }}
+          name: AniSync ${{ steps.release_tag.outputs.tag }}
+          generate_release_notes: true
+          files: app/build/outputs/apk/stable/release/AniSync *.apk
+          token: ${{ secrets.GITHUB_TOKEN }}

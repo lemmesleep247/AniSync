@@ -1,8 +1,9 @@
 package com.anisync.android.presentation.components
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,6 +13,7 @@ import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,23 +26,29 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.anisync.android.R
+import com.anisync.android.presentation.util.LocalAdaptiveInfo
 import com.anisync.android.presentation.util.bouncyClickable
 import com.anisync.android.presentation.util.rememberHapticFeedback
 import com.anisync.android.type.MediaType
 
 /** Height of the rails this toggle sits in, on both Library and Discover. */
-val MediaTypeToggleHeight = 34.dp
+val MediaTypeToggleHeight = 40.dp
+
+/** Width of a segment on compact widths, where it carries its icon alone. */
+private val IconOnlySegmentWidth = 44.dp
 
 /**
- * Anime and manga as two icons rather than a full-width labelled group.
+ * Anime and manga as two segments rather than a full-width group.
  *
- * The switch is used a couple of times a session at most, and the icons are the ones the app
- * already pairs with those words everywhere else. The shapes are the connected-group shapes the
- * rest of the app's switchers use: full radius on the selected end, a tight inner corner on the
- * seam.
+ * Wider windows have the room to spell the two words out, so they do; a phone rail does not, and
+ * keeps the icons alone beside the list chips that share its row. Both cases sit in the same 40dp
+ * target, up from the 35x34dp square that was easy to miss. The shapes are the connected-group
+ * shapes the rest of the app's switchers use: full radius on the selected end, a tight inner
+ * corner on the seam.
  *
  * Shared by the Library rail and Discover's browse rail so the two cannot drift apart.
  */
@@ -52,10 +60,12 @@ fun MediaTypeToggle(
     height: Dp = MediaTypeToggleHeight
 ) {
     val haptic = rememberHapticFeedback()
+    val showLabels = !LocalAdaptiveInfo.current.isCompact
     Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         MediaTypeSegment(
             icon = Icons.Default.Tv,
             label = stringResource(R.string.media_type_anime),
+            showLabel = showLabels,
             selected = selected == MediaType.ANIME,
             shape = RoundedCornerShape(
                 topStart = 17.dp,
@@ -73,6 +83,7 @@ fun MediaTypeToggle(
         MediaTypeSegment(
             icon = Icons.AutoMirrored.Filled.MenuBook,
             label = stringResource(R.string.media_type_manga),
+            showLabel = showLabels,
             selected = selected == MediaType.MANGA,
             shape = RoundedCornerShape(
                 topEnd = 17.dp,
@@ -94,6 +105,7 @@ fun MediaTypeToggle(
 private fun MediaTypeSegment(
     icon: ImageVector,
     label: String,
+    showLabel: Boolean,
     selected: Boolean,
     shape: Shape,
     selectedShape: Shape,
@@ -101,6 +113,11 @@ private fun MediaTypeSegment(
     onClick: () -> Unit
 ) {
     val resolved = if (selected) selectedShape else shape
+    val content = if (selected) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
     Surface(
         color = if (selected) {
             MaterialTheme.colorScheme.primary
@@ -109,7 +126,13 @@ private fun MediaTypeSegment(
         },
         shape = resolved,
         modifier = Modifier
-            .size(width = 35.dp, height = height)
+            .then(
+                if (showLabel) {
+                    Modifier.height(height)
+                } else {
+                    Modifier.size(width = IconOnlySegmentWidth, height = height)
+                }
+            )
             .bouncyClickable(onClick = onClick, role = Role.Tab, clipShape = resolved)
             .clearAndSetSemantics {
                 role = Role.Tab
@@ -117,17 +140,31 @@ private fun MediaTypeSegment(
                 contentDescription = label
             }
     ) {
-        Box(contentAlignment = Alignment.Center) {
+        Row(
+            modifier = if (showLabel) Modifier.padding(horizontal = 14.dp) else Modifier,
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (showLabel) {
+                Arrangement.spacedBy(6.dp)
+            } else {
+                Arrangement.Center
+            }
+        ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (selected) {
-                    MaterialTheme.colorScheme.onPrimary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
+                tint = content,
                 modifier = Modifier.size(18.dp)
             )
+            if (showLabel) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                    color = content,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
         }
     }
 }

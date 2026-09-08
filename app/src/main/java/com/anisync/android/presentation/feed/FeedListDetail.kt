@@ -13,6 +13,7 @@ import com.anisync.android.presentation.navigation.CreateStatus
 import com.anisync.android.presentation.navigation.DetailPanePlaceholder
 import com.anisync.android.presentation.navigation.EditActivity
 import com.anisync.android.presentation.navigation.MediaDetails
+import com.anisync.android.presentation.navigation.SettingsAniList
 import com.anisync.android.presentation.navigation.TwoPaneListDetailScaffold
 import com.anisync.android.presentation.navigation.UserProfile
 import com.anisync.android.presentation.navigation.navigateSafely
@@ -28,7 +29,6 @@ import com.anisync.android.presentation.util.LocalPaneIsRoot
 @Composable
 fun FeedListDetail(
     navController: NavHostController,
-    onLoginClick: () -> Unit,
     onActivityClickFullScreen: (Int) -> Unit,
 ) {
     val feed: @Composable (selectedActivityId: Int?, onActivityClick: (Int) -> Unit) -> Unit = { selectedActivityId, onActivityClick ->
@@ -40,8 +40,8 @@ fun FeedListDetail(
             onLastReplyClick = { activityId, replyId ->
                 navController.navigate(ActivityDetail(activityId, replyId))
             },
-            onLoginClick = onLoginClick,
             onComposeStatus = { navController.navigate(CreateStatus) },
+            onOpenActivitySettings = { navController.navigateSafely(SettingsAniList) },
         )
     }
 

@@ -1,15 +1,12 @@
 package com.anisync.android.presentation.profile.components
 
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -17,20 +14,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.outlined.ChatBubbleOutline
-import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,38 +33,29 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import com.anisync.android.R
 import com.anisync.android.domain.ActivityMediaType
 import com.anisync.android.domain.ActivityType
 import com.anisync.android.domain.UserActivity
-import com.anisync.android.domain.url
 import com.anisync.android.presentation.components.AsyncRichTextRenderer
 import com.anisync.android.presentation.components.ReadMoreToggle
 import com.anisync.android.presentation.components.UserAvatar
 import com.anisync.android.presentation.components.formatRelativeTimeSeconds
 import com.anisync.android.presentation.util.selectedPaneItem
-import com.anisync.android.presentation.util.shareActivity
 
 /**
  * Single card for every activity type — status ([ActivityType.TEXT]), message
@@ -101,9 +85,29 @@ fun ActivityCard(
      * out, turning the card into a compact teaser (used by the profile Overview). The whole card
      * stays clickable, so a tap opens the full activity. Null renders the body in full.
      */
-    maxBodyLines: Int? = null
+    maxBodyLines: Int? = null,
+    /** False on a profile, where every card in the list belongs to the same person. */
+    showAuthor: Boolean = true
 ) {
+    if (activity.type == ActivityType.MEDIA_LIST) {
+        ActivityListCard(
+            activity = activity,
+            onClick = onClick,
+            modifier = modifier,
+            showAuthor = showAuthor,
+            selected = selected,
+            onUserClick = onUserClick,
+            onMediaClick = onMediaClick,
+            onLastReplyClick = onLastReplyClick,
+            onLikeClick = onLikeClick,
+            onSubscribeClick = onSubscribeClick,
+            onDeleteClick = onDeleteClick
+        )
+        return
+    }
+
     val containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+
     Card(
         onClick = onClick,
         modifier = modifier
@@ -130,8 +134,8 @@ fun ActivityCard(
                 activity = activity,
                 onSubscribeClick = onSubscribeClick,
                 onUserClick = onUserClick,
-                onDeleteClick = onDeleteClick,
-                onEditClick = onEditClick
+                onEditClick = onEditClick,
+                onDeleteClick = onDeleteClick
             )
 
             val isTextual = activity.type == ActivityType.TEXT || activity.type == ActivityType.MESSAGE
@@ -139,10 +143,7 @@ fun ActivityCard(
                 // Overview teaser: a fixed line cap that opens the full activity on tap (non-interactive).
                 maxBodyLines != null -> {
                     ClampedActivityBody(maxLines = maxBodyLines, fadeColor = containerColor) {
-                        ActivityCardBody(
-                            activity = activity,
-                            onMediaClick = onMediaClick
-                        )
+                        ActivityCardBody(activity = activity)
                     }
                 }
                 // Full feed: cap long status/message bodies to a readable height with inline expand.
@@ -157,19 +158,10 @@ fun ActivityCard(
                         // than firing the image viewer / following the link.
                         onBodyClick = onClick
                     ) {
-                        ActivityCardBody(
-                            activity = activity,
-                            onMediaClick = onMediaClick
-                        )
+                        ActivityCardBody(activity = activity)
                     }
                 }
-                // List activity: already compact (cover + status line), render in full.
-                else -> {
-                    ActivityCardBody(
-                        activity = activity,
-                        onMediaClick = onMediaClick
-                    )
-                }
+                else -> ActivityCardBody(activity = activity)
             }
 
             ActivityCardFooter(
@@ -246,11 +238,11 @@ private fun ClampedActivityBody(
 }
 
 /**
- * Collapsed height for a status/message body in the full feed. ~15 lines of body text, or a peek of
+ * Collapsed height for a status/message body in the full feed. ~10 lines of body text, or a peek of
  * an embedded image — enough to judge the post without letting one long post dominate the scroll.
  * Bodies taller than this collapse behind a "Read more" toggle; shorter ones render in full.
  */
-private val ACTIVITY_BODY_COLLAPSED_MAX = 340.dp
+private val ACTIVITY_BODY_COLLAPSED_MAX = 240.dp
 
 /**
  * Caps a status/message body to [collapsedMaxHeight] with an inline "Read more"/"Show less" toggle,
@@ -337,8 +329,8 @@ private fun ActivityCardHeader(
     activity: UserActivity,
     onSubscribeClick: (() -> Unit)?,
     onUserClick: (String) -> Unit,
-    onDeleteClick: (() -> Unit)? = null,
-    onEditClick: (() -> Unit)? = null
+    onEditClick: (() -> Unit)?,
+    onDeleteClick: (() -> Unit)?
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -348,7 +340,7 @@ private fun ActivityCardHeader(
         UserAvatar(
             url = activity.userAvatarUrl,
             contentDescription = activity.userName,
-            size = 40.dp,
+            size = 36.dp,
             modifier = Modifier.clickable { activity.userName?.let { onUserClick(it) } }
         )
 
@@ -400,7 +392,8 @@ private fun ActivityCardHeader(
             )
         }
 
-        // Action Buttons Grouped (Notifications, Share, MoreVert)
+        // Subscribe stays on the card because it is a state you read at a glance; share, the
+        // AniList link and the owner's own edit and delete live in the overflow menu.
         Row(
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
@@ -420,149 +413,30 @@ private fun ActivityCardHeader(
                 }
             }
 
-            val context = LocalContext.current
-            IconButton(
-                onClick = { shareActivity(context, activity.id) },
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Share,
-                    contentDescription = stringResource(R.string.cd_share),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-
-            if (onDeleteClick != null) {
-                ActivityOverflowMenu(
-                    onDeleteClick = onDeleteClick,
-                    onEditClick = onEditClick,
-                    modifier = Modifier.size(36.dp)
-                )
-            }
+            ActivityOverflowButton(
+                activity = activity,
+                onEditClick = onEditClick,
+                onDeleteClick = onDeleteClick
+            )
         }
     }
 }
 
+/** Status and message bodies only — a list update is drawn by [ActivityListCard] instead. */
 @Composable
-private fun ActivityCardBody(
-    activity: UserActivity,
-    onMediaClick: (Int) -> Unit
-) {
-    when (activity.type) {
-        ActivityType.MEDIA_LIST -> {
-            Spacer(Modifier.height(12.dp))
-            // Tint the body with the media's cover accent color; fall back to the theme
-            // container when AniList returns no color or an unparseable value.
-            val coverAccent = remember(activity.mediaCoverColor) {
-                activity.mediaCoverColor?.parseHexColor()
-            } ?: MaterialTheme.colorScheme.primaryContainer
-            Row(
-                verticalAlignment = Alignment.Top,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        color = coverAccent.copy(alpha = 0.4f),
-                        shape = RoundedCornerShape(16.dp)
-                    )
-                    .border(
-                        width = 1.dp,
-                        color = coverAccent.copy(alpha = 0.5f),
-                        shape = RoundedCornerShape(16.dp)
-                    )
-                    .padding(10.dp)
-            ) {
-                val coverModifier = Modifier
-                    .width(64.dp)
-                    .aspectRatio(3f / 4f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .let { base ->
-                        val mediaId = activity.mediaId
-                        if (mediaId != null) base.clickable { onMediaClick(mediaId) } else base
-                    }
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-
-                if (activity.mediaCoverUrl != null) {
-                    AsyncImage(
-                        model = activity.mediaCover.url() ?: activity.mediaCoverUrl,
-                        contentDescription = activity.mediaTitle,
-                        modifier = coverModifier.border(
-                            width = 1.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
-                            shape = RoundedCornerShape(12.dp)
-                        ),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Box(modifier = coverModifier, contentAlignment = Alignment.Center) {
-                        Text(
-                            text = activity.mediaTitle.take(2).ifBlank { "??" }.uppercase(),
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(top = 4.dp)
-                ) {
-                    ActivityListStatusText(activity = activity)
-                    activity.mediaType?.let { type ->
-                        Spacer(Modifier.height(6.dp))
-                        MediaTypeLabel(type)
-                    }
-                }
-            }
-        }
-
-        else -> {
-            val rawHtml = activity.text.orEmpty()
-            if (rawHtml.isNotBlank()) {
-                Spacer(Modifier.height(12.dp))
-                AsyncRichTextRenderer(
-                    html = rawHtml,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.25f
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
+private fun ActivityCardBody(activity: UserActivity) {
+    val rawHtml = activity.text.orEmpty()
+    if (rawHtml.isNotBlank()) {
+        Spacer(Modifier.height(12.dp))
+        AsyncRichTextRenderer(
+            html = rawHtml,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.25f
+            ),
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
-}
-
-@Composable
-private fun ActivityListStatusText(activity: UserActivity, modifier: Modifier = Modifier) {
-    val primaryColor = MaterialTheme.colorScheme.primary
-    val styledText =
-        remember(activity.status, activity.progress, activity.mediaTitle, primaryColor) {
-            val statusText = (activity.status ?: "Updated")
-                .replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
-            val progressText = activity.progress.orEmpty()
-            buildAnnotatedString {
-                append("$statusText ")
-                if (progressText.isNotEmpty()) {
-                    withStyle(SpanStyle(color = primaryColor, fontWeight = FontWeight.Bold)) {
-                        append(progressText)
-                    }
-                    append(" of ")
-                }
-                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
-                    append(activity.mediaTitle)
-                }
-            }
-        }
-    Text(
-        text = styledText,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurface,
-        maxLines = 4,
-        overflow = TextOverflow.Ellipsis,
-        modifier = modifier
-    )
 }
 
 /**
@@ -583,6 +457,13 @@ internal fun MediaTypeLabel(type: ActivityMediaType) {
     )
 }
 
+/**
+ * One row under a hairline: who replied last on the left, replies and likes on the right.
+ *
+ * The two used to be separate clusters with the counts tucked into the corner. Sharing a row makes
+ * the divider mean something — everything above it is the post, everything below is what happened
+ * to it — and puts the two things you tap within a thumb's reach of each other.
+ */
 @Composable
 private fun ActivityCardFooter(
     activity: UserActivity,
@@ -590,88 +471,28 @@ private fun ActivityCardFooter(
     onCommentClick: () -> Unit = {},
     onLikeClick: (() -> Unit)? = null
 ) {
+    HorizontalDivider(
+        modifier = Modifier.padding(top = 12.dp),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .padding(top = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f, fill = false)
-        ) {
-            if (activity.replyUserName != null && activity.repliedAt != null) {
-                Surface(
-                    onClick = {
-                        val replyId = activity.lastReplyId
-                        if (replyId != null) onLastReplyClick(activity.id, replyId)
-                    },
-                    shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(
-                            start = 6.dp,
-                            end = 12.dp,
-                            top = 6.dp,
-                            bottom = 6.dp
-                        )
-                    ) {
-                        UserAvatar(
-                            url = activity.replyUserAvatarUrl,
-                            contentDescription = activity.replyUserName,
-                            size = 20.dp
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(
-                                R.string.forum_last_by,
-                                activity.replyUserName,
-                                formatRelativeTimeSeconds(LocalResources.current, activity.repliedAt)
-                            ),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            ActivityStatPill(
-                icon = Icons.Outlined.ChatBubbleOutline,
-                value = activity.replyCount,
-                onClick = onCommentClick,
-                contentDescription = stringResource(R.string.cd_comments),
-                contentColor = MaterialTheme.colorScheme.primary,
-                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-            )
-
-            val isLiked = activity.isLiked
-            ActivityStatPill(
-                icon = if (isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                value = activity.likeCount,
-                onClick = onLikeClick,
-                contentDescription = stringResource(if (isLiked) R.string.cd_unlike else R.string.cd_like),
-                contentColor = if (isLiked) Color(0xFFBE123C) else MaterialTheme.colorScheme.primary,
-                containerColor = if (isLiked) Color(0xFFBE123C).copy(alpha = 0.1f) else MaterialTheme.colorScheme.primary.copy(
-                    alpha = 0.1f
-                )
-            )
-        }
+        ActivityLastReply(
+            activity = activity,
+            onLastReplyClick = onLastReplyClick,
+            modifier = Modifier.weight(1f),
+            avatarSize = 20.dp
+        )
+        ActivityCounts(
+            activity = activity,
+            onCommentClick = onCommentClick,
+            onLikeClick = onLikeClick
+        )
     }
 }
-
-private fun String.parseHexColor(): Color? =
-    runCatching { Color(android.graphics.Color.parseColor(this)) }.getOrNull()
 

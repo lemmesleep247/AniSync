@@ -29,6 +29,12 @@ class FeedRepositoryImpl @Inject constructor(
         scope: FeedScope,
         mediaType: FeedMediaType
     ): Result<FeedPage> = safeApiCall {
+        // Media type is a property of list activity alone, so it narrows the List chip and nothing
+        // else: All has to mean both types, or it drops half the updates without saying so.
+        val listType = when (mediaType) {
+            FeedMediaType.ANIME -> ActivityType.ANIME_LIST
+            FeedMediaType.MANGA -> ActivityType.MANGA_LIST
+        }
         val typeIn = when (filter) {
             FeedFilter.ALL -> listOf(
                 ActivityType.TEXT,
@@ -36,10 +42,7 @@ class FeedRepositoryImpl @Inject constructor(
                 ActivityType.MANGA_LIST
             )
             FeedFilter.STATUS -> listOf(ActivityType.TEXT)
-            FeedFilter.LIST -> when (mediaType) {
-                FeedMediaType.ANIME -> listOf(ActivityType.ANIME_LIST)
-                FeedMediaType.MANGA -> listOf(ActivityType.MANGA_LIST)
-            }
+            FeedFilter.LIST -> listOf(listType)
         }
 
         val response = apolloClient
@@ -56,16 +59,20 @@ class FeedRepositoryImpl @Inject constructor(
             .doNotStore(true)
             .execute()
 
+        // A request that never made it carries an exception rather than GraphQL errors, and its
+        // data is null. Reading that as an empty page is how a rate limit came out as "no activity
+        // yet" instead of saying what happened.
+        response.exception?.let { throw it }
         if (response.hasErrors()) {
             throw Exception(response.errors?.firstOrNull()?.message ?: "Failed to load feed")
         }
+        val pageData = response.data?.Page ?: throw Exception("Failed to load feed")
 
         // Respect the viewer's AniList "display adult content" option (mirrored into AppSettings):
         // hide list activity for 18+ media, matching the website. Text/message activities carry no
         // media, so mediaIsAdult is false for them and they pass through untouched.
         val showAdult = appSettings.showAdultContent.value
-        val pageData = response.data?.Page
-        val items = pageData?.activities
+        val items = pageData.activities
             ?.filterNotNull()
             // Hide activity from users the viewer has blocked on AniList (issue #76). isBlocked is
             // selected inline on the feed query (not the shared ActivityFields fragment) — see Feed.graphql.
@@ -82,8 +89,8 @@ class FeedRepositoryImpl @Inject constructor(
 
         FeedPage(
             items = items,
-            hasNextPage = pageData?.pageInfo?.hasNextPage == true,
-            currentPage = pageData?.pageInfo?.currentPage ?: page
+            hasNextPage = pageData.pageInfo?.hasNextPage == true,
+            currentPage = pageData.pageInfo?.currentPage ?: page
         )
     }
 }

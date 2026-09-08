@@ -40,25 +40,33 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.anisync.android.R
 import com.anisync.android.domain.ActivityType
 import com.anisync.android.domain.ContentLimits
+import com.anisync.android.domain.FeedFilter
 import com.anisync.android.domain.FeedScope
 import com.anisync.android.presentation.components.CustomPullToRefreshIndicator
-import com.anisync.android.presentation.components.EmptyStateCompact
-import com.anisync.android.presentation.components.EmptyStateConfigs
-import com.anisync.android.presentation.components.ScrollToTopFab
 import com.anisync.android.presentation.components.alert.rememberRateLimitedRefresh
 import com.anisync.android.presentation.components.richtext.RichTextInputSheet
-import com.anisync.android.presentation.feed.components.FeedFilterBar
+import com.anisync.android.presentation.feed.components.FeedDayHeader
+import com.anisync.android.presentation.feed.components.FeedEmptyState
+import com.anisync.android.presentation.feed.components.FeedOfflineState
+import com.anisync.android.presentation.feed.components.FeedRail
+import com.anisync.android.presentation.feed.components.NewActivityPill
+import com.anisync.android.presentation.feed.components.GroupedListActivityCard
 import com.anisync.android.presentation.profile.components.ActivityCard
+import com.anisync.android.presentation.settings.activityMergeLabel
 import com.anisync.android.presentation.util.LocalMainNavBarInset
 import com.anisync.android.presentation.util.LocalRailFabState
 import com.anisync.android.presentation.util.SetRailFab
 import kotlinx.coroutines.launch
+
+/** AniList answers 429 when the app asks faster than its budget allows. */
+private const val RATE_LIMIT_CODE = 429
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -67,8 +75,8 @@ fun FeedScreen(
     onUserClick: (String) -> Unit,
     onMediaClick: (Int) -> Unit,
     onLastReplyClick: (activityId: Int, replyId: Int) -> Unit,
-    onLoginClick: () -> Unit,
     onComposeStatus: () -> Unit,
+    onOpenActivitySettings: () -> Unit,
     // The activity id open in the two-pane detail (or null); its card shows the selection ring.
     selectedActivityId: Int? = null,
     viewModel: FeedViewModel = hiltViewModel()
@@ -78,7 +86,10 @@ fun FeedScreen(
     val pullToRefreshState = rememberPullToRefreshState()
     val systemBarsPadding = WindowInsets.systemBars.asPaddingValues()
     val coroutineScope = rememberCoroutineScope()
-    val showScrollToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 3 } }
+    val atTop by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
+    val feedItems = remember(uiState.items, uiState.groupListUpdates) {
+        buildFeedItems(uiState.items, uiState.groupListUpdates)
+    }
 
     // On rail layouts the compose action lives in the rail header (Material 3); on compact it stays a
     // floating action button below. SetRailFab is a no-op when there is no rail.
@@ -102,38 +113,35 @@ fun FeedScreen(
                     .navigationBarsPadding()
                     .padding(bottom = LocalMainNavBarInset.current)
             ) {
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    ScrollToTopFab(
-                        visible = showScrollToTop,
-                        onClick = { coroutineScope.launch { listState.animateScrollToItem(0) } }
-                    )
-                    if (!hasRail) {
-                        FloatingActionButton(
-                            onClick = onComposeStatus,
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = stringResource(R.string.cd_write_status)
-                            )
-                        }
+                if (!hasRail) {
+                    FloatingActionButton(
+                        onClick = onComposeStatus,
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = stringResource(R.string.cd_write_status)
+                        )
                     }
                 }
             }
         },
         topBar = {
             Column(modifier = Modifier.statusBarsPadding()) {
-                FeedFilterBar(
-                    filter = uiState.filter,
+                FeedRail(
                     scope = uiState.scope,
+                    filter = uiState.filter,
                     mediaType = uiState.mediaType,
-                    onFilterChange = { viewModel.onAction(FeedAction.OnFilterChange(it)) },
+                    groupListUpdates = uiState.groupListUpdates,
+                    mergeWindowLabel = activityMergeLabel(uiState.activityMergeMinutes),
                     onScopeChange = { viewModel.onAction(FeedAction.OnScopeChange(it)) },
-                    onMediaTypeChange = { viewModel.onAction(FeedAction.OnMediaTypeChange(it)) },
+                    onFilterChange = { viewModel.onAction(FeedAction.OnFilterChange(it)) },
+                    onListTypeChange = { viewModel.onAction(FeedAction.OnListTypeChange(it)) },
+                    onToggleGroupListUpdates = {
+                        viewModel.onAction(FeedAction.ToggleGroupListUpdates)
+                    },
+                    onOpenActivitySettings = onOpenActivitySettings,
                     modifier = Modifier.padding(vertical = 8.dp)
                 )
 
@@ -158,14 +166,26 @@ fun FeedScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            when {
-                !uiState.isAuthenticated && uiState.scope == FeedScope.FOLLOWING -> {
-                    EmptyStateConfigs.NotLoggedIn(
-                        onLoginClick = onLoginClick,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
+            NewActivityPill(
+                count = uiState.newActivityCount,
+                onClick = {
+                    viewModel.onAction(FeedAction.DismissNewActivity)
+                    coroutineScope.launch { listState.animateScrollToItem(0) }
+                },
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 8.dp)
+                    .zIndex(1f)
+            )
 
+            // Reaching the top is the same answer the pill offers, so it stops asking.
+            LaunchedEffect(atTop, uiState.newActivityCount) {
+                if (atTop && uiState.newActivityCount > 0) {
+                    viewModel.onAction(FeedAction.DismissNewActivity)
+                }
+            }
+
+            when {
                 uiState.isLoading && uiState.items.isEmpty() -> {
                     Box(
                         modifier = Modifier.fillMaxSize(),
@@ -176,23 +196,30 @@ fun FeedScreen(
                 }
 
                 uiState.errorMessage != null && uiState.items.isEmpty() -> {
-                    EmptyStateConfigs.GenericError(
-                        message = uiState.errorMessage!!,
-                        onRetryClick = { viewModel.onAction(FeedAction.Refresh) },
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    PullableState {
+                        FeedOfflineState(
+                            rateLimited = uiState.errorCode == RATE_LIMIT_CODE,
+                            onRetry = { viewModel.onAction(FeedAction.Refresh) },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 }
 
                 uiState.items.isEmpty() -> {
-                    val emptyMsg = when (uiState.scope) {
-                        FeedScope.GLOBAL -> stringResource(R.string.feed_empty_global)
-                        FeedScope.FOLLOWING -> stringResource(R.string.feed_empty_following)
+                    PullableState {
+                        FeedEmptyState(
+                            scope = uiState.scope,
+                            filter = uiState.filter,
+                            mediaType = uiState.mediaType,
+                            onSwitchToGlobal = {
+                                viewModel.onAction(FeedAction.OnScopeChange(FeedScope.GLOBAL))
+                            },
+                            onClearFilters = {
+                                viewModel.onAction(FeedAction.OnFilterChange(FeedFilter.ALL))
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
                     }
-                    EmptyStateCompact(
-                        icon = Icons.Default.DynamicFeed,
-                        title = emptyMsg,
-                        modifier = Modifier.fillMaxSize()
-                    )
                 }
 
                 else -> {
@@ -200,56 +227,68 @@ fun FeedScreen(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
-                            start = 16.dp,
-                            end = 16.dp,
+                            start = 24.dp,
+                            end = 24.dp,
                             top = 8.dp,
                             bottom = systemBarsPadding.calculateBottomPadding() + 96.dp
                         ),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         itemsIndexed(
-                            items = uiState.items,
-                            key = { _, activity -> "feed_${activity.id}" },
-                            contentType = { _, activity -> activity.type.name }
-                        ) { index, activity ->
+                            items = feedItems,
+                            key = { _, item -> item.key },
+                            contentType = { _, item -> item::class }
+                        ) { index, item ->
 
-                            if (index >= uiState.items.size - 4 && uiState.hasNextPage && !uiState.isLoading && !uiState.isPaginating) {
+                            if (index >= feedItems.size - 4 && uiState.hasNextPage && !uiState.isLoading && !uiState.isPaginating) {
                                 LaunchedEffect(index) {
                                     viewModel.onAction(FeedAction.LoadMore)
                                 }
                             }
 
-                            key(activity.id) {
-                                val isOwner = uiState.viewerId != null &&
-                                    activity.userId == uiState.viewerId
-                                val cardLike: () -> Unit = {
-                                    viewModel.onAction(FeedAction.ToggleLike(activity.id))
-                                }
-                                val cardDelete: (() -> Unit)? = if (isOwner) {
-                                    { viewModel.onAction(FeedAction.DeleteActivity(activity.id)) }
-                                } else null
-                                // Edit only on own TEXT or MESSAGE activities — never on
-                                // server-derived MEDIA_LIST entries.
-                                val cardEdit: (() -> Unit)? =
-                                    if (isOwner && (activity.type == ActivityType.TEXT ||
-                                            activity.type == ActivityType.MESSAGE)) {
-                                        { viewModel.onAction(FeedAction.EditActivity(activity.id)) }
-                                    } else null
+                            when (item) {
+                                is FeedItem.DayHeader -> FeedDayHeader(startOfDay = item.startOfDay)
 
-                                ActivityCard(
-                                    activity = activity,
-                                    selected = activity.id == selectedActivityId,
-                                    onClick = { onActivityClick(activity.id) },
+                                is FeedItem.Group -> GroupedListActivityCard(
+                                    activities = item.activities,
+                                    onActivityClick = onActivityClick,
                                     onUserClick = onUserClick,
-                                    onMediaClick = onMediaClick,
-                                    onLastReplyClick = onLastReplyClick,
-                                    onSubscribeClick = {
-                                        viewModel.onAction(FeedAction.ToggleSubscribe(activity.id))
-                                    },
-                                    onLikeClick = cardLike,
-                                    onDeleteClick = cardDelete,
-                                    onEditClick = cardEdit
+                                    onMediaClick = onMediaClick
                                 )
+
+                                is FeedItem.Single -> {
+                                    val activity = item.activity
+                                    val isOwner = uiState.viewerId != null &&
+                                        activity.userId == uiState.viewerId
+                                    val cardLike: () -> Unit = {
+                                        viewModel.onAction(FeedAction.ToggleLike(activity.id))
+                                    }
+                                    val cardDelete: (() -> Unit)? = if (isOwner) {
+                                        { viewModel.onAction(FeedAction.DeleteActivity(activity.id)) }
+                                    } else null
+                                    // Edit only on own TEXT or MESSAGE activities — never on
+                                    // server-derived MEDIA_LIST entries.
+                                    val cardEdit: (() -> Unit)? =
+                                        if (isOwner && (activity.type == ActivityType.TEXT ||
+                                                activity.type == ActivityType.MESSAGE)) {
+                                            { viewModel.onAction(FeedAction.EditActivity(activity.id)) }
+                                        } else null
+
+                                    ActivityCard(
+                                        activity = activity,
+                                        selected = activity.id == selectedActivityId,
+                                        onClick = { onActivityClick(activity.id) },
+                                        onUserClick = onUserClick,
+                                        onMediaClick = onMediaClick,
+                                        onLastReplyClick = onLastReplyClick,
+                                        onSubscribeClick = {
+                                            viewModel.onAction(FeedAction.ToggleSubscribe(activity.id))
+                                        },
+                                        onLikeClick = cardLike,
+                                        onDeleteClick = cardDelete,
+                                        onEditClick = cardEdit
+                                    )
+                                }
                             }
                         }
 
@@ -286,5 +325,23 @@ fun FeedScreen(
             onSubmit = { body -> viewModel.onAction(FeedAction.SubmitEdit(body)) },
             onDismiss = { viewModel.onAction(FeedAction.DismissEdit) }
         )
+    }
+}
+
+/**
+ * A full-screen state the reader can still pull down on.
+ *
+ * Pull to refresh listens for nested scroll, and a centred column reports none, so every empty and
+ * error state used to ignore the gesture its own copy told the reader to use. One item as tall as
+ * the viewport keeps the state centred and hands the pull through.
+ */
+@Composable
+private fun PullableState(content: @Composable () -> Unit) {
+    LazyColumn(modifier = Modifier.fillMaxSize()) {
+        item {
+            Box(modifier = Modifier.fillParentMaxSize()) {
+                content()
+            }
+        }
     }
 }

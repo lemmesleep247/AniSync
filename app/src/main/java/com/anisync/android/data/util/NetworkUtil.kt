@@ -31,38 +31,49 @@ suspend fun <T> safeApiCall(
 ): Result<T> {
     return try {
         Result.Success(apiCall())
-    } catch (e: ApiError.RateLimited) {
-        Result.Error("Too many requests. Please wait ${e.retryAfterSeconds} seconds.", 429, e.retryAfterSeconds, e)
-    } catch (e: ApiError.Unauthorized) {
-        Result.Error("Your session has expired. Please log in again.", 401, null, e)
-    } catch (e: ApiError.Forbidden) {
-        Result.Error(e.message ?: "You don't have permission to do that.", 401, null, e)
-    } catch (e: ApiError.ServerError) {
-        Result.Error("Server error (${e.statusCode}). Please try again later.", e.statusCode, null, e)
-    } catch (e: ApiError.NetworkError) {
-        Result.Error("No internet connection. Check your network and try again.", null, null, e)
-    } catch (e: ApiError.GraphQLError) {
-        Result.Error(e.errors.firstOrNull() ?: "An API error occurred.", e.statusCode, null, e)
-    } catch (e: ApiError) {
-        Result.Error(e.message ?: "An unexpected error occurred.", null, null, e)
-    } catch (e: ApolloHttpException) {
-        // HTTP errors not caught by the interceptor (shouldn't normally reach here,
-        // but acts as a safety net)
-        val message = when (e.statusCode) {
+    } catch (e: Exception) {
+        // The interceptor throws ApiError, but Apollo hands some of them back wrapped, and a
+        // rate limit that arrives as "no internet connection" sends the reader after the wrong
+        // problem. Unwrap before mapping.
+        val apiError = generateSequence(e as Throwable) { it.cause }
+            .filterIsInstance<ApiError>()
+            .firstOrNull()
+        apiError?.toResult() ?: e.toResult()
+    }
+}
+
+private fun ApiError.toResult(): Result.Error = when (this) {
+    is ApiError.RateLimited ->
+        Result.Error("Too many requests. Please wait $retryAfterSeconds seconds.", 429, retryAfterSeconds, this)
+    is ApiError.Unauthorized ->
+        Result.Error("Your session has expired. Please log in again.", 401, null, this)
+    is ApiError.Forbidden ->
+        Result.Error(message ?: "You don't have permission to do that.", 401, null, this)
+    is ApiError.ServerError ->
+        Result.Error("Server error ($statusCode). Please try again later.", statusCode, null, this)
+    is ApiError.NetworkError ->
+        Result.Error("No internet connection. Check your network and try again.", null, null, this)
+    is ApiError.GraphQLError ->
+        Result.Error(errors.firstOrNull() ?: "An API error occurred.", statusCode, null, this)
+    else -> Result.Error(message ?: "An unexpected error occurred.", null, null, this)
+}
+
+private fun Exception.toResult(): Result.Error = when (this) {
+    // HTTP errors the interceptor did not classify, as a safety net.
+    is ApolloHttpException -> {
+        val text = when (statusCode) {
             429 -> "Too many requests. Please try again later."
             401 -> "Session expired. Please log in again."
             403 -> "Access denied."
             in 500..599 -> "Server error. Please try again later."
-            else -> "HTTP error ${e.statusCode}: ${e.message}"
+            else -> "HTTP error $statusCode: $message"
         }
-        Result.Error(message, e.statusCode, null, e)
-    } catch (e: ApolloNetworkException) {
-        Result.Error("No internet connection. Check your network and try again.", null, null, e)
-    } catch (e: ApolloException) {
-        Result.Error("Network error: ${e.message}", null, null, e)
-    } catch (e: Exception) {
-        Result.Error(e.message ?: "An unexpected error occurred.", null, null, e)
+        Result.Error(text, statusCode, null, this)
     }
+    is ApolloNetworkException ->
+        Result.Error("No internet connection. Check your network and try again.", null, null, this)
+    is ApolloException -> Result.Error("Network error: $message", null, null, this)
+    else -> Result.Error(message ?: "An unexpected error occurred.", null, null, this)
 }
 
 /**

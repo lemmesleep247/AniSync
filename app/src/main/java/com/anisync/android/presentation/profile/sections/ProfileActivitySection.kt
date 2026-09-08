@@ -128,7 +128,8 @@ fun LazyListScope.profileActivityTab(
                 onSubscribeClick = { onSubscribeClick(activity.id) },
                 onLikeClick = cardLike,
                 onDeleteClick = cardDelete,
-                onEditClick = cardEdit
+                onEditClick = cardEdit,
+                showAuthor = false
             )
         }
 

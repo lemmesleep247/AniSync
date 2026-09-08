@@ -365,17 +365,8 @@ fun AniSyncNavHost(
                 popEnterTransition = { sharedAxisXEnter(forward = false) },
                 popExitTransition = { sharedAxisXExit(forward = false) }
             ) {
-                val onLogin = remember(navController) {
-                    {
-                        navController.navigate(Login) {
-                            popUpTo(0) { inclusive = true }
-                        }
-                    }
-                }
-
                 FeedListDetail(
                     navController = navController,
-                    onLoginClick = onLogin,
                     onActivityClickFullScreen = navigateToActivity,
                 )
             }

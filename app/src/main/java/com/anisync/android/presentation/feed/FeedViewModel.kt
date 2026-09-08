@@ -3,13 +3,16 @@ package com.anisync.android.presentation.feed
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.anisync.android.data.AppSettings
+import com.anisync.android.data.account.AccountManager
 import com.anisync.android.domain.ActivityEventBus
 import com.anisync.android.domain.ActivityRepository
 import com.anisync.android.domain.ActivityType
 import com.anisync.android.domain.ActivityUpdate
+import com.anisync.android.domain.FeedFilter
 import com.anisync.android.domain.FeedRepository
 import com.anisync.android.domain.FeedScope
 import com.anisync.android.domain.Result
+import com.anisync.android.domain.UserOptionsRepository
 import com.anisync.android.presentation.components.alert.ToastManager
 import com.anisync.android.presentation.components.alert.ToastType
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -34,14 +37,19 @@ class FeedViewModel @Inject constructor(
     private val feedRepository: FeedRepository,
     private val activityRepository: ActivityRepository,
     private val activityEventBus: ActivityEventBus,
+    private val accountManager: AccountManager,
     private val appSettings: AppSettings,
+    private val userOptionsRepository: UserOptionsRepository,
     private val toastManager: ToastManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
         FeedUiState(
+            viewerId = accountManager.activeAccount.value?.id,
             scope = appSettings.lastFeedScope.value,
-            filter = appSettings.feedFilter.value
+            filter = appSettings.feedFilter.value,
+            mediaType = appSettings.feedMediaType.value,
+            groupListUpdates = appSettings.groupFeedListUpdates.value
         )
     )
     val uiState: StateFlow<FeedUiState> = _uiState.asStateFlow()
@@ -53,6 +61,22 @@ class FeedViewModel @Inject constructor(
     private var loadJob: Job? = null
 
     init {
+        // Which cards offer edit and delete follows the signed-in account, which switching accounts
+        // changes under us.
+        viewModelScope.launch {
+            accountManager.activeAccount.collect { account ->
+                _uiState.update { it.copy(viewerId = account?.id) }
+            }
+        }
+
+        // The account's merge window is the server-side half of grouping, so the feed menu shows
+        // whatever the options screen last synced rather than asking AniList again.
+        viewModelScope.launch {
+            userOptionsRepository.cachedOptions.collect { options ->
+                _uiState.update { it.copy(activityMergeMinutes = options?.activityMergeTime) }
+            }
+        }
+
         // Reflect like / subscribe / reply / delete made on the activity detail
         // screen (or elsewhere) back onto the cached feed items without a refetch.
         viewModelScope.launch {
@@ -89,16 +113,18 @@ class FeedViewModel @Inject constructor(
     }
 
     fun onScreenVisible() {
-        if (!hasLoadedInitially) {
-            hasLoadedInitially = true
-            load(page = 1)
-            viewModelScope.launch {
-                val viewerId = activityRepository.getViewerId()
-                if (viewerId != null) {
-                    _uiState.update { it.copy(viewerId = viewerId) }
-                }
-            }
+        if (hasLoadedInitially) {
+            // Coming back to a feed that is already drawn: refresh underneath it and let the reader
+            // decide when to jump, rather than reshuffling what they are in the middle of reading.
+            // A load already on its way owns the screen — cancelling it for this one would strand
+            // the spinner it put up.
+            val state = _uiState.value
+            if (state.isLoading || state.isRefreshing || state.isPaginating) return
+            load(page = 1, replaceExisting = true, silent = true)
+            return
         }
+        hasLoadedInitially = true
+        load(page = 1)
     }
 
     fun onAction(action: FeedAction) {
@@ -151,10 +177,14 @@ class FeedViewModel @Inject constructor(
                 load(page = 1, replaceExisting = true)
             }
 
-            is FeedAction.OnMediaTypeChange -> {
-                if (_uiState.value.mediaType == action.mediaType) return
+            is FeedAction.OnListTypeChange -> {
+                val current = _uiState.value
+                if (current.filter == FeedFilter.LIST && current.mediaType == action.mediaType) return
+                appSettings.setFeedFilter(FeedFilter.LIST)
+                appSettings.setFeedMediaType(action.mediaType)
                 _uiState.update {
                     it.copy(
+                        filter = FeedFilter.LIST,
                         mediaType = action.mediaType,
                         items = persistentListOf(),
                         hasNextPage = false,
@@ -166,6 +196,17 @@ class FeedViewModel @Inject constructor(
                     )
                 }
                 load(page = 1, replaceExisting = true)
+            }
+
+            is FeedAction.DismissNewActivity -> {
+                if (_uiState.value.newActivityCount == 0) return
+                _uiState.update { it.copy(newActivityCount = 0) }
+            }
+
+            is FeedAction.ToggleGroupListUpdates -> {
+                val grouped = !_uiState.value.groupListUpdates
+                appSettings.setGroupFeedListUpdates(grouped)
+                _uiState.update { it.copy(groupListUpdates = grouped) }
             }
 
             is FeedAction.ToggleSubscribe -> toggleSubscribe(action.activityId)
@@ -373,32 +414,36 @@ class FeedViewModel @Inject constructor(
         }
     }
 
-    private fun load(page: Int, replaceExisting: Boolean = false) {
+    /**
+     * [silent] loads without the spinner and without clearing what is on screen: the result only
+     * counts what is new, which is what the "new activity" pill offers to scroll to.
+     */
+    private fun load(page: Int, replaceExisting: Boolean = false, silent: Boolean = false) {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
-            if (page == 1 && !_uiState.value.isRefreshing && !_uiState.value.isLoading) {
+            if (page == 1 && !silent && !_uiState.value.isRefreshing && !_uiState.value.isLoading) {
                 _uiState.update { it.copy(isLoading = true) }
             }
 
             val state = _uiState.value
 
-            if (state.scope == FeedScope.FOLLOWING) {
-                val viewerId = activityRepository.getViewerId()
-                if (viewerId == null) {
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            isRefreshing = false,
-                            isPaginating = false,
-                            isAuthenticated = false,
-                            items = persistentListOf(),
-                            hasNextPage = false,
-                            currentPage = 1,
-                            errorMessage = null
-                        )
-                    }
-                    return@launch
+            // Signed out is a local fact, not a question for AniList: asking the network who the
+            // viewer is turned every rate limit into "you follow nobody", because the lookup
+            // answers null for a failed request and for a missing account alike.
+            if (state.scope == FeedScope.FOLLOWING && accountManager.activeAccount.value == null) {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        isRefreshing = false,
+                        isPaginating = false,
+                        isAuthenticated = false,
+                        items = persistentListOf(),
+                        hasNextPage = false,
+                        currentPage = 1,
+                        errorMessage = null
+                    )
                 }
+                return@launch
             }
 
             when (val result = feedRepository.getFeed(
@@ -416,6 +461,12 @@ class FeedViewModel @Inject constructor(
                         } else {
                             (current.items + data.items).distinctBy { it.id }
                         }
+                        val known = current.items.mapTo(mutableSetOf()) { it.id }
+                        val newCount = if (silent) {
+                            data.items.count { it.id !in known }
+                        } else {
+                            0
+                        }
                         current.copy(
                             isLoading = false,
                             isRefreshing = false,
@@ -424,7 +475,9 @@ class FeedViewModel @Inject constructor(
                             items = merged.toPersistentList(),
                             hasNextPage = data.hasNextPage,
                             currentPage = data.currentPage,
-                            errorMessage = null
+                            newActivityCount = newCount,
+                            errorMessage = null,
+                            errorCode = null
                         )
                     }
                 }
@@ -435,7 +488,19 @@ class FeedViewModel @Inject constructor(
                             isLoading = false,
                             isRefreshing = false,
                             isPaginating = false,
-                            errorMessage = result.message
+                            // A refresh that failed under a drawn feed keeps what is on screen;
+                            // with nothing drawn there is nothing to protect, and silence would
+                            // read as "no activity" rather than "this did not load".
+                            errorMessage = if (silent && it.items.isNotEmpty()) {
+                                it.errorMessage
+                            } else {
+                                result.message
+                            },
+                            errorCode = if (silent && it.items.isNotEmpty()) {
+                                it.errorCode
+                            } else {
+                                result.code
+                            }
                         )
                     }
                 }

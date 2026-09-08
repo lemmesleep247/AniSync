@@ -74,7 +74,8 @@ fun RecentUpdatesSection(
                         onLikeClick = cardLike,
                         onDeleteClick = cardDelete,
                         onEditClick = cardEdit,
-                        maxBodyLines = maxBodyLines
+                        maxBodyLines = maxBodyLines,
+                        showAuthor = false
                     )
                 }
             }

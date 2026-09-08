@@ -23,7 +23,15 @@ data class FeedUiState(
     val mediaType: FeedMediaType = FeedMediaType.ANIME,
     val isAuthenticated: Boolean = true,
     val viewerId: Int? = null,
+    /** Collapse a run of list updates from one person into one card (feed display choice). */
+    val groupListUpdates: Boolean = true,
+    /** The account's AniList `activityMergeTime`, shown on the feed menu. Null until options load. */
+    val activityMergeMinutes: Int? = null,
+    /** Activities a background refresh pulled in above what the reader has already seen. */
+    val newActivityCount: Int = 0,
     val errorMessage: String? = null,
+    /** HTTP-ish code behind [errorMessage]; 429 gets its own wording rather than the offline one. */
+    val errorCode: Int? = null,
     val pendingLikeIds: ImmutableSet<Int> = persistentSetOf(),
     val pendingDeleteIds: ImmutableSet<Int> = persistentSetOf(),
     /**
@@ -40,7 +48,10 @@ sealed interface FeedAction {
     data object LoadMore : FeedAction
     data class OnFilterChange(val filter: FeedFilter) : FeedAction
     data class OnScopeChange(val scope: FeedScope) : FeedAction
-    data class OnMediaTypeChange(val mediaType: FeedMediaType) : FeedAction
+    /** The Anime and Manga chips: list activity of one type, in one step. */
+    data class OnListTypeChange(val mediaType: FeedMediaType) : FeedAction
+    data object ToggleGroupListUpdates : FeedAction
+    data object DismissNewActivity : FeedAction
     data class ToggleSubscribe(val activityId: Int) : FeedAction
     data class ToggleLike(val activityId: Int) : FeedAction
     data class DeleteActivity(val activityId: Int) : FeedAction

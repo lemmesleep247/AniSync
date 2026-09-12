@@ -249,6 +249,7 @@ class LibraryViewModel @Inject constructor(
 
             is LibraryAction.BulkSetStatus -> bulkUpdate(status = action.status)
             is LibraryAction.BulkSetScore -> bulkUpdate(score = action.score)
+            is LibraryAction.BulkSetPriority -> bulkUpdate(priority = action.priority.raw)
             is LibraryAction.BulkSetPrivate -> bulkUpdate(isPrivate = action.isPrivate)
             is LibraryAction.BulkAddToCustomList -> bulkAddToCustomList(action.listName)
             is LibraryAction.BulkRemove -> bulkRemove()
@@ -276,12 +277,13 @@ class LibraryViewModel @Inject constructor(
     private fun bulkUpdate(
         status: LibraryStatus? = null,
         score: Double? = null,
+        priority: Int? = null,
         isPrivate: Boolean? = null
     ) {
         val ids = _uiState.value.selectedEntryIds.toList()
         if (ids.isEmpty()) return
         viewModelScope.launch {
-            when (val result = libraryRepository.bulkUpdateEntries(ids, status, score, isPrivate)) {
+            when (val result = libraryRepository.bulkUpdateEntries(ids, status, score, priority, isPrivate)) {
                 is Result.Success -> {
                     clearSelection()
                     toastManager.showToast(
@@ -448,6 +450,9 @@ class LibraryViewModel @Inject constructor(
                         LibrarySort.LAST_ADDED -> sortableEntries.sortedWith(primaryDesc { it.entry.createdAt })
                         LibrarySort.START_DATE -> sortableEntries.sortedWith(primaryDesc { it.entry.startedAt })
                         LibrarySort.RELEASE_DATE -> sortableEntries.sortedWith(primaryDesc { it.entry.mediaStartDate })
+                        // On the level, not the raw Int: anything at or above 2 reads as High, so
+                        // sorting on the raw value would order two rows the list draws identically.
+                        LibrarySort.PRIORITY -> sortableEntries.sortedWith(primaryDesc { it.entry.priorityLevel.ordinal })
                     }
 
                     val customEntriesMap = HashMap<String, MutableList<LibraryEntry>>()

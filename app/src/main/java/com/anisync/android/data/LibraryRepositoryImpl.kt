@@ -202,6 +202,7 @@ class LibraryRepositoryImpl @Inject constructor(
                             score = entry.score,
                             advancedScores = entry.advancedScores.toScoreMap(),
                             rewatches = entry.repeat ?: 0,
+                            priority = entry.priority ?: 0,
                             notes = entry.notes,
                             startedAt = entry.startedAt?.let { mapFuzzyDateToLong(it.year, it.month, it.day) },
                             completedAt = entry.completedAt?.let { mapFuzzyDateToLong(it.year, it.month, it.day) },
@@ -359,6 +360,14 @@ class LibraryRepositoryImpl @Inject constructor(
                     score = Optional.presentIfNotNull(updatedEntry.score),
                     advancedScores = advancedScoresFor(updatedEntry),
                     repeat = Optional.present(updatedEntry.rewatches),
+                    // Only when it moved. AniList's priority is a plain 0..255 Int and this client
+                    // only writes 0/1/2, so resending it unchanged would flatten a value some other
+                    // client set outside that range.
+                    priority = if (updatedEntry.priority != (originalEntry?.priority ?: 0)) {
+                        Optional.present(updatedEntry.priority)
+                    } else {
+                        Optional.absent()
+                    },
                     notes = Optional.presentIfNotNull(updatedEntry.notes?.let(::encodeForAniList)),
                     startedAt = updatedEntry.startedAt?.let { Optional.present(it.toFuzzyDateInput()) } ?: Optional.absent(),
                     completedAt = updatedEntry.completedAt?.let { Optional.present(it.toFuzzyDateInput()) } ?: Optional.absent(),
@@ -417,6 +426,7 @@ class LibraryRepositoryImpl @Inject constructor(
         entryIds: List<Int>,
         status: LibraryStatus?,
         score: Double?,
+        priority: Int?,
         isPrivate: Boolean?
     ): Result<Unit> {
         if (entryIds.isEmpty()) return Result.Success(Unit)
@@ -427,6 +437,7 @@ class LibraryRepositoryImpl @Inject constructor(
         // landing from a concurrent +1 on a row that happens to be in the selection.
         status?.let { libraryDao.updateStatusForIds(owner, entryIds, it, now) }
         score?.let { libraryDao.updateScoreForIds(owner, entryIds, it, now) }
+        priority?.let { libraryDao.updatePriorityForIds(owner, entryIds, it, now) }
         isPrivate?.let { libraryDao.updatePrivateForIds(owner, entryIds, it, now) }
 
         return safeApiCall {
@@ -435,6 +446,7 @@ class LibraryRepositoryImpl @Inject constructor(
                     ids = Optional.present(entryIds),
                     status = Optional.presentIfNotNull(status?.toApiStatus()),
                     score = Optional.presentIfNotNull(score),
+                    priority = Optional.presentIfNotNull(priority),
                     `private` = Optional.presentIfNotNull(isPrivate)
                 )
             ).execute()

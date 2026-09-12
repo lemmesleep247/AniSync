@@ -63,6 +63,8 @@ data class LibraryEntryEntity(
     val nextAiringEpisodeTime: Long? = null, // Added for absolute airing time
     val score: Double? = 0.0,
     val rewatches: Int = 0,
+    @androidx.room.ColumnInfo(defaultValue = "0")
+    val priority: Int = 0,
     val notes: String? = null,
     val startedAt: Long? = null,
     val completedAt: Long? = null,

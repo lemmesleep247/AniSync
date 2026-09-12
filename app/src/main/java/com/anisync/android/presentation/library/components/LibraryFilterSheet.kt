@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,6 +35,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.anisync.android.R
 import com.anisync.android.presentation.components.filtersheet.FilterSheetScaffold
@@ -214,9 +216,12 @@ private fun SortPill(
             )
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // The label takes the slack so the tick lands on the pill's trailing edge. Sharing a
+            // weight with a spacer split the slack in two and left the tick mid-pill, which only
+            // showed up once the pill got wide enough to notice.
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyLarge,
@@ -226,10 +231,11 @@ private fun SortPill(
                     MaterialTheme.colorScheme.onSurface
                 },
                 maxLines = 1,
-                modifier = Modifier.weight(1f, fill = false)
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
             )
             if (selected) {
-                Spacer(Modifier.weight(1f))
+                Spacer(Modifier.width(8.dp))
                 Icon(
                     imageVector = Icons.Default.Check,
                     contentDescription = null,

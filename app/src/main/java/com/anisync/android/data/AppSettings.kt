@@ -200,6 +200,12 @@ class AppSettings @Inject constructor(
     // AniList profile color. Device-local appearance preference; default off (opt-in).
     private val _respectUserProfileColors = MutableStateFlow(prefs.getBoolean(KEY_RESPECT_PROFILE_COLORS, false))
     val respectUserProfileColors: StateFlow<Boolean> = _respectUserProfileColors.asStateFlow()
+
+    // When on, a media page retints itself (MaterialKolor seed) from the cover artwork's own color.
+    // Device-local appearance preference; default on, since a flat page for every title is what it
+    // exists to fix.
+    private val _mediaArtworkTheming = MutableStateFlow(prefs.getBoolean(KEY_MEDIA_ARTWORK_THEMING, true))
+    val mediaArtworkTheming: StateFlow<Boolean> = _mediaArtworkTheming.asStateFlow()
     
     // Haptic feedback setting
     private val _hapticEnabled = MutableStateFlow(prefs.getBoolean(KEY_HAPTIC_ENABLED, true))
@@ -758,6 +764,11 @@ class AppSettings @Inject constructor(
         _respectUserProfileColors.value = enabled
         prefs.edit().putBoolean(KEY_RESPECT_PROFILE_COLORS, enabled).apply()
     }
+
+    fun setMediaArtworkTheming(enabled: Boolean) {
+        _mediaArtworkTheming.value = enabled
+        prefs.edit().putBoolean(KEY_MEDIA_ARTWORK_THEMING, enabled).apply()
+    }
     
     /**
      * Enable or disable haptic feedback.
@@ -1300,6 +1311,7 @@ companion object {
         private const val KEY_AVATAR_BACKGROUND_ENABLED = "avatar_background_enabled"
         private const val KEY_DISABLE_AVATAR_SHAPE_PROFILE = "disable_avatar_shape_profile"
         private const val KEY_RESPECT_PROFILE_COLORS = "respect_user_profile_colors"
+        private const val KEY_MEDIA_ARTWORK_THEMING = "media_artwork_theming"
         private const val KEY_COVER_QUALITY = "cover_quality"
         private const val KEY_PREFERRED_STREAMING_SERVICE = "preferred_streaming_service"
         private const val KEY_SELECTED_PALETTE = "selected_palette"

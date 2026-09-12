@@ -198,6 +198,14 @@ interface LibraryDao {
         timestamp: Long = System.currentTimeMillis()
     )
 
+    @Query("UPDATE library_entries SET priority = :priority, lastUpdated = :timestamp WHERE ownerId = :ownerId AND id IN (:ids)")
+    suspend fun updatePriorityForIds(
+        ownerId: Int,
+        ids: List<Int>,
+        priority: Int,
+        timestamp: Long = System.currentTimeMillis()
+    )
+
     @Query("UPDATE library_entries SET isPrivate = :isPrivate, lastUpdated = :timestamp WHERE ownerId = :ownerId AND id IN (:ids)")
     suspend fun updatePrivateForIds(
         ownerId: Int,

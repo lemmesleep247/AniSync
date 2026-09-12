@@ -1,6 +1,11 @@
 package com.anisync.android.presentation.components
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -27,7 +32,13 @@ fun CustomPullToRefreshIndicator(
 
     // Show LoadingIndicator when refreshing or pulling
     if (isRefreshing || state.distanceFraction > 0f) {
-        Box(modifier = modifier) {
+        // Keeps the indicator clear of the status bar and the camera cutout on screens that draw
+        // under them. safeDrawing, not statusBars: a punch hole can reach past the bar.
+        Box(
+            modifier = modifier.windowInsetsPadding(
+                WindowInsets.safeDrawing.only(WindowInsetsSides.Top)
+            )
+        ) {
             ContainedLoadingIndicator(
             modifier = Modifier.align(Alignment.Center),
             polygons = customPolygons

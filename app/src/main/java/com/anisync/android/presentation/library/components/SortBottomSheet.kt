@@ -51,6 +51,7 @@ fun SortBottomSheet(
                 LibrarySort.LAST_ADDED -> stringResource(R.string.sort_last_added)
                 LibrarySort.START_DATE -> stringResource(R.string.sort_start_date)
                 LibrarySort.RELEASE_DATE -> stringResource(R.string.sort_release_date)
+                LibrarySort.PRIORITY -> stringResource(R.string.sort_priority)
             }
             FilterOptionRow(
                 label = label,

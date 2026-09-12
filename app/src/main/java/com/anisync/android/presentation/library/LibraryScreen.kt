@@ -91,11 +91,13 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.anisync.android.R
 import com.anisync.android.domain.LibraryEntry
+import com.anisync.android.domain.LibraryPriority
 import com.anisync.android.domain.LibraryStatus
 import com.anisync.android.presentation.components.CustomPullToRefreshIndicator
 import com.anisync.android.presentation.components.ErrorState
 import com.anisync.android.presentation.components.alert.rememberRateLimitedRefresh
 import com.anisync.android.presentation.library.components.BulkAddToListSheet
+import com.anisync.android.presentation.library.components.BulkPrioritySheet
 import com.anisync.android.presentation.library.components.BulkProgressDialog
 import com.anisync.android.presentation.library.components.BulkScoreSheet
 import com.anisync.android.presentation.library.components.BulkStatusSheet
@@ -195,6 +197,7 @@ fun LibraryScreen(
     var showBulkStatus by rememberSaveable { mutableStateOf(false) }
     var showBulkScore by rememberSaveable { mutableStateOf(false) }
     var showBulkAddToList by rememberSaveable { mutableStateOf(false) }
+    var showBulkPriority by rememberSaveable { mutableStateOf(false) }
     var editingEntry by remember { mutableStateOf<LibraryEntry?>(null) }
 
     val tabs = remember(uiState.tabOrder, uiState.hiddenListNames, uiState.customListNames) {
@@ -597,6 +600,7 @@ fun LibraryScreen(
                                             editingEntry = entry
                                         }
                                     },
+                                    onSetPriority = { showBulkPriority = true },
                                     onSetPrivate = {
                                         viewModel.onAction(LibraryAction.BulkSetPrivate(it))
                                     },
@@ -660,6 +664,16 @@ fun LibraryScreen(
             viewModel.onAction(LibraryAction.BulkSetScore(score))
         },
         onDismiss = { showBulkScore = false }
+    )
+
+    BulkPrioritySheet(
+        visible = showBulkPriority,
+        count = uiState.selectedEntryIds.size,
+        onPick = { level ->
+            showBulkPriority = false
+            viewModel.onAction(LibraryAction.BulkSetPriority(level))
+        },
+        onDismiss = { showBulkPriority = false }
     )
 
     BulkAddToListSheet(
@@ -918,10 +932,12 @@ private fun QueueGroupHeader(title: Int, count: Int) {
 private data class QueueGroup(val title: Int?, val entries: List<LibraryEntry>)
 
 /**
- * Splits an airing-sorted watching list into what you can watch now and what you are waiting for.
+ * Headers for the two sorts whose order means something you can name.
  *
- * Only for the airing sort on a list with quick progress: under any other order the split would
- * fight the order the user chose, and on a finished list everything is ready by definition.
+ * Priority splits into its three levels, which is what makes the sort legible: without the headers
+ * the list is just a re-order nothing on screen explains. Airing splits a watching list into what
+ * you can watch now and what you are waiting for. Every other order gets one unheaded run, because
+ * a header there would fight the order the user chose.
  */
 private fun buildQueueGroups(
     entries: List<LibraryEntry>,
@@ -929,6 +945,7 @@ private fun buildQueueGroups(
     hasQuickProgress: Boolean,
     mediaType: MediaType
 ): List<QueueGroup> {
+    if (sort == LibrarySort.PRIORITY) return buildPriorityGroups(entries)
     if (sort != LibrarySort.AIRING_SOON || !hasQuickProgress) {
         return listOf(QueueGroup(null, entries))
     }
@@ -944,6 +961,28 @@ private fun buildQueueGroups(
         QueueGroup(R.string.library_group_ready, ready),
         QueueGroup(R.string.library_group_waiting, waiting)
     )
+}
+
+/**
+ * One run per priority level, in the order the entries already arrived in.
+ *
+ * The sort put them in level order, so a single pass keeps each level's own ordering (title, or
+ * whatever the direction toggle asked for) intact. Empty levels emit no header, and a list that
+ * lands in one level emits none at all — a lone "Low" over every row says nothing.
+ */
+private fun buildPriorityGroups(entries: List<LibraryEntry>): List<QueueGroup> {
+    val byLevel = entries.groupBy { it.priorityLevel }
+    if (byLevel.size <= 1) return listOf(QueueGroup(null, entries))
+    return entries
+        .map { it.priorityLevel }
+        .distinct()
+        .map { level -> QueueGroup(level.titleRes(), byLevel.getValue(level)) }
+}
+
+private fun LibraryPriority.titleRes(): Int = when (this) {
+    LibraryPriority.HIGH -> R.string.priority_high
+    LibraryPriority.MEDIUM -> R.string.priority_medium
+    LibraryPriority.LOW -> R.string.priority_low
 }
 
 @Composable

@@ -9,6 +9,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -147,9 +150,11 @@ fun PersonHero(
     sharedTransitionScope: SharedTransitionScope? = null,
     animatedVisibilityScope: AnimatedVisibilityScope? = null
 ) {
-    val bannerHeight = 220.dp
+    // The banner carries the status-bar height so the portrait stays put below it.
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val bannerHeight = topInset + 220.dp
     val portraitWidth = 120.dp
-    val portraitTop = 150.dp
+    val portraitTop = topInset + 150.dp
     val portraitStart = 24.dp
     val textStart = portraitStart + portraitWidth + 16.dp
     val portraitShape = RoundedCornerShape(12.dp)

@@ -94,6 +94,7 @@ import coil.request.ImageRequest
 import com.anisync.android.R
 import com.anisync.android.data.TitleLanguage
 import com.anisync.android.domain.LibraryEntry
+import com.anisync.android.domain.LibraryPriority
 import com.anisync.android.domain.LibraryStatus
 import com.anisync.android.domain.ScoreFormat
 import com.anisync.android.domain.displayValue
@@ -105,6 +106,8 @@ import com.anisync.android.presentation.components.AppModalBottomSheet
 import com.anisync.android.presentation.components.iconRes
 import com.anisync.android.presentation.components.toIndicatorKind
 import com.anisync.android.presentation.util.rememberHapticFeedback
+import com.anisync.android.presentation.util.toIconRes
+import com.anisync.android.presentation.util.toLabel
 import com.anisync.android.type.MediaType
 import com.anisync.android.ui.theme.emphasis
 import com.anisync.android.ui.theme.ListIndicatorKind
@@ -147,6 +150,9 @@ fun EditLibraryEntrySheet(
     var startedAt by rememberSaveable(entry.id) { mutableStateOf(entry.startedAt) }
     var completedAt by rememberSaveable(entry.id) { mutableStateOf(entry.completedAt) }
     var rewatches by rememberSaveable(entry.id) { mutableIntStateOf(entry.rewatches) }
+    // Raw, not the level: an untouched foreign 3..255 has to survive, and the repository decides
+    // whether to send the field by comparing it to what was there before.
+    var priority by rememberSaveable(entry.id) { mutableIntStateOf(entry.priority) }
     var isPrivate by rememberSaveable(entry.id) { mutableStateOf(entry.isPrivate) }
     var hiddenFromStatusLists by rememberSaveable(entry.id) { mutableStateOf(entry.hiddenFromStatusLists) }
     var selectedCustomLists by remember(entry.id) { mutableStateOf(entry.customLists.toSet()) }
@@ -174,6 +180,7 @@ fun EditLibraryEntrySheet(
                 startedAt != entry.startedAt ||
                 completedAt != entry.completedAt ||
                 rewatches != entry.rewatches ||
+                priority != entry.priority ||
                 isPrivate != entry.isPrivate ||
                 hiddenFromStatusLists != entry.hiddenFromStatusLists ||
                 selectedCustomLists != entry.customLists.toSet() ||
@@ -209,6 +216,7 @@ fun EditLibraryEntrySheet(
         startedAt = startedAt,
         completedAt = completedAt,
         rewatches = rewatches,
+        priority = priority,
         customLists = selectedCustomLists.toList(),
         advancedScores = advancedScores,
         isPrivate = isPrivate,
@@ -291,6 +299,14 @@ fun EditLibraryEntrySheet(
                     onSelect = {
                         haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                         status = it
+                    }
+                )
+
+                PriorityRow(
+                    priority = LibraryPriority.of(priority),
+                    onSelect = {
+                        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                        priority = it.raw
                     }
                 )
 
@@ -879,6 +895,88 @@ private fun LibraryStatus.labelRes(isAnime: Boolean): Int = when (this) {
     LibraryStatus.PAUSED -> R.string.status_paused
     LibraryStatus.DROPPED -> R.string.status_dropped
     LibraryStatus.UNKNOWN -> R.string.filter_status
+}
+
+// ================== PRIORITY ==================
+
+/**
+ * Low / Medium / High, in the status grid's cell language one row shorter.
+ *
+ * AniList stores this as a 0..255 Int with no documented levels, so the three cells are the whole
+ * vocabulary this client writes. Low is also what an entry that has never been touched reads as,
+ * which is why nothing else in the app marks it.
+ */
+@Composable
+private fun PriorityRow(
+    priority: LibraryPriority,
+    onSelect: (LibraryPriority) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        SectionLabel(text = stringResource(R.string.priority))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            LibraryPriority.entries.forEach { level ->
+                PriorityCell(
+                    level = level,
+                    isSelected = level == priority,
+                    onClick = { onSelect(level) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PriorityCell(
+    level: LibraryPriority,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier
+            .height(56.dp)
+            .semantics { selected = isSelected },
+        shape = ControlShape,
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.surfaceContainer
+        },
+        contentColor = if (isSelected) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        border = if (isSelected) {
+            BorderStroke(1.5.dp, MaterialTheme.colorScheme.onPrimary)
+        } else {
+            null
+        }
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = ImageVector.vectorResource(level.toIconRes()),
+                contentDescription = null,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = level.toLabel(),
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
 }
 
 // ================== CUSTOM LISTS ==================

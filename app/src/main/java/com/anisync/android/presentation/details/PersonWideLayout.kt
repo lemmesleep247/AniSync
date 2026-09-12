@@ -11,6 +11,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -275,6 +278,8 @@ fun PersonWideLayout(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surfaceContainer)
+            // Zero inside a pane, where the host already cleared the bar.
+            .windowInsetsPadding(WindowInsets.statusBars)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             PersonBannerCard(
@@ -492,7 +497,7 @@ fun BannerIconButton(
         modifier = modifier
             .size(40.dp)
             .clip(CircleShape)
-            .background(Color.Black.copy(alpha = 0.32f))
+            .background(Color.Black.copy(alpha = 0.36f))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {

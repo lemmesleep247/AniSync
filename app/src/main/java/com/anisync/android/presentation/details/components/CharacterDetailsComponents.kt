@@ -14,6 +14,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -86,6 +89,9 @@ fun DetailHeroImage(
     transitionKey: String = TransitionKeys.characterImage(id)
 ) {
     val bannerImageUrl = backdropUrl ?: imageUrl
+    // The banner carries the status-bar height so the portrait stays put below it.
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val bannerHeight = topInset + 280.dp
     val portraitShape = RoundedCornerShape(dimensionResource(R.dimen.corner_radius_large))
     val imageModifier = if (sharedTransitionScope != null && animatedVisibilityScope != null) {
         val spatialSpec = AppMotion.rememberSpatialSpec()
@@ -118,7 +124,7 @@ fun DetailHeroImage(
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(280.dp)
+                .height(bannerHeight)
                 .clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
                 .graphicsLayer {
                     scaleX = 1.1f
@@ -131,7 +137,7 @@ fun DetailHeroImage(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(280.dp)
+                .height(bannerHeight)
                 .clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
                 .background(
                     Brush.verticalGradient(
@@ -153,7 +159,7 @@ fun DetailHeroImage(
             contentDescription = contentDescription,
             contentScale = ContentScale.Crop,
             modifier = Modifier
-                .padding(start = 24.dp, top = 220.dp)
+                .padding(start = 24.dp, top = topInset + 220.dp)
                 .width(140.dp)
                 .aspectRatio(5f / 7f)
                 .then(imageModifier)

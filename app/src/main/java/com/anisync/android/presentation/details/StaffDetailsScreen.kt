@@ -75,6 +75,9 @@ import com.anisync.android.domain.StaffDetails
 import com.anisync.android.domain.StaffProductionMedia
 import com.anisync.android.domain.VoicedCharacter
 import com.anisync.android.presentation.components.AnimatedFavoriteButton
+import com.anisync.android.presentation.components.bannerChromeColors
+import com.anisync.android.presentation.components.bannerChromeContainer
+import com.anisync.android.presentation.components.bannerChromeTint
 import com.anisync.android.presentation.components.AppModalBottomSheet
 import com.anisync.android.presentation.components.ImageViewerDialog
 import com.anisync.android.presentation.details.components.CharacterSkeletonContent
@@ -158,10 +161,9 @@ fun StaffDetailsScreen(
         topBar = {
             if (wideLayout) return@Scaffold
             val title = details?.getName(titleLanguage) ?: ""
-            val iconTint by animateColorAsState(
-                if (isScrolled) MaterialTheme.colorScheme.onSurface else Color.White,
-                label = "personIconTint"
-            )
+            val overBanner = !isScrolled
+            val iconTint = bannerChromeTint(overBanner)
+            val chromeColors = bannerChromeColors(overBanner)
 
             TopAppBar(
                 title = {
@@ -180,7 +182,7 @@ fun StaffDetailsScreen(
                 },
                 navigationIcon = {
                     if (!LocalPaneIsRoot.current) {
-                        IconButton(onClick = onBackClick) {
+                        IconButton(onClick = onBackClick, colors = chromeColors) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = stringResource(R.string.back),
@@ -194,10 +196,12 @@ fun StaffDetailsScreen(
                         AnimatedFavoriteButton(
                             isFavorite = details.isFavourite,
                             onClick = viewModel::toggleFavourite,
-                            inactiveColor = iconTint
+                            inactiveColor = iconTint,
+                            containerColor = bannerChromeContainer(overBanner),
+                            boxSize = 40.dp
                         )
                     }
-                    IconButton(onClick = { showShareSheet = true }) {
+                    IconButton(onClick = { showShareSheet = true }, colors = chromeColors) {
                         Icon(
                             imageVector = Icons.Default.Share,
                             contentDescription = stringResource(R.string.cd_share),
@@ -207,7 +211,7 @@ fun StaffDetailsScreen(
                     // At a two-pane detail root the close (✕) is the trailing-most action (right-thumb
                     // reach) in place of a leading back arrow.
                     if (LocalPaneIsRoot.current) {
-                        IconButton(onClick = onBackClick) {
+                        IconButton(onClick = onBackClick, colors = chromeColors) {
                             Icon(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = stringResource(R.string.pane_close),
@@ -233,7 +237,7 @@ fun StaffDetailsScreen(
         ) {
             when (val state = uiState) {
                 is StaffDetailsUiState.Loading -> {
-                    CharacterSkeletonContent(onBackClick = onBackClick)
+                    CharacterSkeletonContent()
                 }
 
                 is StaffDetailsUiState.Success -> {

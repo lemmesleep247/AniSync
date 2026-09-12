@@ -5,13 +5,18 @@ import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -38,13 +43,18 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -146,11 +156,22 @@ fun ProfileContent(
     val portraitColumns = profileGridColumns(baseMinSize = 150.dp)
     val studioColumns = profileGridColumns(baseMinSize = 240.dp, compactColumns = 2)
 
+    // The banner runs under the status bar, so the tab strip can't be a stickyHeader: that docks at
+    // the list's top edge, which is behind the clock. Instead the strip is a real in-list item and a
+    // pinned copy takes over once it reaches the bar, the same swap the media-detail tabs use.
+    val statusBarInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val dockPx = with(LocalDensity.current) { statusBarInset.roundToPx() }.toFloat()
+    var contentTopWindow by remember { mutableFloatStateOf(0f) }
+    var inlineTabsTopWindow by remember { mutableFloatStateOf(Float.MAX_VALUE) }
+    val tabsDocked by remember { derivedStateOf { inlineTabsTopWindow <= contentTopWindow + dockPx } }
+
     PullToRefreshBox(
         isRefreshing = uiState.isRefreshing,
         onRefresh = rememberRateLimitedRefresh { onAction(ProfileAction.Refresh()) },
         state = pullToRefreshState,
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .onGloballyPositioned { contentTopWindow = it.boundsInWindow().top },
         indicator = {
             CustomPullToRefreshIndicator(
                 isRefreshing = uiState.isRefreshing,
@@ -199,10 +220,12 @@ fun ProfileContent(
             )
         }
 
-        stickyHeader {
+        item(key = "profile_tabs", contentType = "tabs") {
             Surface(
                 color = MaterialTheme.colorScheme.background,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onGloballyPositioned { inlineTabsTopWindow = it.boundsInWindow().top }
             ) {
                 ProfileTabsButtonGroup(
                     selectedTab = uiState.selectedTab,
@@ -234,6 +257,22 @@ fun ProfileContent(
             onShareStats = { statsShareVisible = true },
             onShareFavourites = { favouritesShareVisible = true }
         )
+    }
+
+    if (tabsDocked) {
+        Surface(
+            color = MaterialTheme.colorScheme.background,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+        ) {
+            Box(modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars)) {
+                ProfileTabsButtonGroup(
+                    selectedTab = uiState.selectedTab,
+                    onTabSelected = { onAction(ProfileAction.SelectTab(it)) }
+                )
+            }
+        }
     }
     }
     }

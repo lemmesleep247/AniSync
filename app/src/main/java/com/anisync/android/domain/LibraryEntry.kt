@@ -6,6 +6,35 @@ import com.anisync.android.type.MediaSeason
 import com.anisync.android.type.MediaType
 import kotlinx.serialization.Serializable
 
+/**
+ * The three levels AniList's `MediaList.priority` is shown as.
+ *
+ * The API documents the field only as "Priority of planning (Min: 0, Max: 255)" — no enum, no
+ * named levels, and anilist.co never renders it. 255 is the storage ceiling, not a scale, so the
+ * meaning belongs to the client: 0/1/2 matches AniHyou, which is the only other client that writes
+ * the field, and interop is the whole reason to agree on numbers at all.
+ *
+ * Reading is deliberately wider than writing. [of] folds anything at or above 2 into [HIGH] so a
+ * value set elsewhere still renders, and a save only sends `priority` when the control was
+ * actually touched, so a foreign 3..255 survives a round trip through this app.
+ */
+enum class LibraryPriority {
+    /** Raw 0 — which is also "never set", so this level renders as nothing. */
+    LOW,
+    MEDIUM,
+    HIGH;
+
+    val raw: Int get() = ordinal
+
+    companion object {
+        fun of(raw: Int): LibraryPriority = when {
+            raw <= 0 -> LOW
+            raw == 1 -> MEDIUM
+            else -> HIGH
+        }
+    }
+}
+
 enum class LibraryStatus {
     CURRENT,
     PLANNING,
@@ -43,6 +72,8 @@ data class LibraryEntry(
     val startedAt: Long? = null,
     val completedAt: Long? = null,
     val rewatches: Int = 0,
+    /** Raw AniList `MediaList.priority`. Read it through [priorityLevel] rather than directly. */
+    val priority: Int = 0,
     val notes: String? = null,
     /**
      * The owning user's score display format. Carried in-memory for read-only views of another
@@ -81,6 +112,8 @@ data class LibraryEntry(
      */
     val advancedScores: Map<String, Double> = emptyMap()
 ) {
+    val priorityLevel: LibraryPriority get() = LibraryPriority.of(priority)
+
     /**
      * Computes the dynamic time until airing based on the absolute timestamp.
      * Returns null if no airing scheduled or already aired.

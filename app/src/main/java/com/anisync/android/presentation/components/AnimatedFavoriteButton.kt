@@ -26,6 +26,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -53,7 +56,11 @@ fun AnimatedFavoriteButton(
     modifier: Modifier = Modifier,
     iconSize: Dp = 24.dp,
     activeColor: Color = Color(0xFFFF1744), // Material Red A400
-    inactiveColor: Color = LocalContentColor.current
+    inactiveColor: Color = LocalContentColor.current,
+    /** Scrim disc behind the heart, for chrome sitting on a banner. */
+    containerColor: Color = Color.Transparent,
+    /** Fixed so the row can't reflow as [containerColor] animates. */
+    boxSize: Dp = iconSize + 8.dp
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val haptic = rememberHapticFeedback()
@@ -130,7 +137,9 @@ fun AnimatedFavoriteButton(
 
     Box(
         modifier = modifier
-            .size(iconSize + 8.dp) // Fixed size prevents layout shift
+            .size(boxSize)
+            .clip(CircleShape)
+            .background(containerColor)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,

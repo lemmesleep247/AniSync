@@ -31,7 +31,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -47,7 +46,6 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.PlayArrow
@@ -63,7 +61,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -80,6 +77,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -103,15 +101,14 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.view.WindowCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
@@ -124,7 +121,13 @@ import com.anisync.android.domain.MediaDetails
 import com.anisync.android.domain.coverageEpisodeCount
 import com.anisync.android.domain.MediaFollowingEntry
 import com.anisync.android.domain.url
+import com.anisync.android.presentation.components.AnimatedFavoriteButton
 import com.anisync.android.presentation.components.CustomPullToRefreshIndicator
+import com.anisync.android.presentation.components.bannerChromeColors
+import com.anisync.android.presentation.components.bannerChromeContainer
+import com.anisync.android.presentation.components.bannerChromeTint
+import com.anisync.android.presentation.components.bannerScrimBrush
+import com.anisync.android.presentation.components.bannerScrimHeight
 import com.anisync.android.presentation.components.alert.rememberRateLimitedRefresh
 import com.anisync.android.presentation.components.SegmentedTabGroup
 import com.anisync.android.presentation.components.HeaderLevel
@@ -154,6 +157,7 @@ import com.anisync.android.presentation.details.components.ReviewsListSheet
 import com.anisync.android.presentation.details.components.StaffItem
 import com.anisync.android.presentation.details.components.mediaStatsTabContent
 import com.anisync.android.presentation.util.AppMotion
+import com.anisync.android.presentation.util.LocalAppSettings
 import com.anisync.android.presentation.util.LocalPaneIsRoot
 import com.anisync.android.presentation.util.TransitionKeys
 import com.anisync.android.presentation.util.formatAsTitle
@@ -165,6 +169,9 @@ import com.anisync.android.presentation.share.MediaShareCard
 import com.anisync.android.presentation.share.ShareCardTemplate
 import com.anisync.android.presentation.share.ShareImageSheet
 import com.anisync.android.presentation.share.parseCoverColor
+import com.anisync.android.ui.theme.mediaArtworkColorScheme
+import com.anisync.android.ui.theme.mediaArtworkSeedColor
+import com.anisync.android.ui.theme.resolveDarkTheme
 import com.anisync.android.util.AniListUrls
 import com.anisync.android.util.getTitle
 
@@ -284,8 +291,8 @@ fun MediaDetailsScreen(
         is DetailsUiState.Error -> false
         DetailsUiState.Loading -> true
     }
-    // Status-bar icon appearance follows the app theme (set globally): the banner no longer draws
-    // under the status bar — a root status-bar scrim sits above it — so no per-screen override.
+    // No per-screen bar-appearance override: the icons follow the app theme, and recent platform
+    // builds pick them from the content behind the bar anyway. Legibility is the scrim's job.
 
     val isDetailsEnteringFromBackStack by remember {
         derivedStateOf {
@@ -344,358 +351,367 @@ fun MediaDetailsScreen(
         }
     }
 
-    with(sharedTransitionScope) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            Scaffold(
-                containerColor = MaterialTheme.colorScheme.background,
-                contentWindowInsets = ScaffoldDefaults.contentWindowInsets,
-                topBar = {
-                    val state = uiState
+    // Everything the page draws sits inside the override: chrome, banner blend, tabs and sheets.
+    MediaArtworkThemeOverride(
+        coverColor = (uiState as? DetailsUiState.Success)?.details?.coverColor
+    ) {
+        with(sharedTransitionScope) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Scaffold(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    contentWindowInsets = ScaffoldDefaults.contentWindowInsets,
+                    topBar = {
+                        val state = uiState
 
-                    val appBarTitle = remember(state, titleLanguage) {
-                        (state as? DetailsUiState.Success)?.details?.getTitle(titleLanguage) ?: ""
-                    }
+                        val appBarTitle = remember(state, titleLanguage) {
+                            (state as? DetailsUiState.Success)?.details?.getTitle(titleLanguage) ?: ""
+                        }
 
-                    // Over the banner the chrome sits on artwork of any brightness, so every
-                    // button carries a scrim of its own. Off the banner there is nothing to sit
-                    // on and the icons take the theme colour.
-                    val overBanner = !isScrolled && bannerVisible
-                    val chromeTint = animateColorAsState(
-                        if (overBanner) Color.White else MaterialTheme.colorScheme.onSurface,
-                        label = "chromeIconTint"
-                    ).value
-                    val chromeColors = IconButtonDefaults.iconButtonColors(
-                        containerColor = animateColorAsState(
-                            if (overBanner) Color.Black.copy(alpha = 0.36f) else Color.Transparent,
-                            label = "chromeScrim"
-                        ).value,
-                        contentColor = chromeTint
-                    )
+                        val overBanner = !isScrolled && bannerVisible
+                        val chromeTint = bannerChromeTint(overBanner)
+                        val chromeColors = bannerChromeColors(overBanner)
 
-                    with(sharedTransitionScope) {
-                        TopAppBar(
-                            modifier = Modifier
-                                .renderInSharedTransitionScopeOverlay(
-                                    zIndexInOverlay = 1f,
-                                    renderInOverlay = { shouldRenderChromeInOverlay }
-                                )
-                                .graphicsLayer {
-                                    alpha =
-                                        if (shouldRenderChromeInOverlay) chromeOverlayAlpha else 1f
-                                },
-                            title = {
-                                AnimatedVisibility(
-                                    visible = isScrolled,
-                                    enter = fadeIn(),
-                                    exit = fadeOut()
-                                ) {
-                                    Text(
-                                        text = appBarTitle,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        style = MaterialTheme.typography.titleLarge
+                        with(sharedTransitionScope) {
+                            TopAppBar(
+                                modifier = Modifier
+                                    .renderInSharedTransitionScopeOverlay(
+                                        zIndexInOverlay = 1f,
+                                        renderInOverlay = { shouldRenderChromeInOverlay }
                                     )
-                                }
-                            },
-                            navigationIcon = {
-                                if (!LocalPaneIsRoot.current) {
-                                    IconButton(onClick = onBackClick, colors = chromeColors) {
-                                        Icon(
-                                            imageVector = navigationIcon,
-                                            contentDescription = stringResource(R.string.back),
-                                            tint = chromeTint
-                                        )
-                                    }
-                                }
-                            },
-                            actions = {
-                                // Favourite and share live here now. They used to be the two
-                                // loudest controls on the page — a filled 56dp button and a
-                                // full-width pill — above a page whose job is tracking.
-                                (state as? DetailsUiState.Success)?.details?.let { details ->
-                                    IconButton(
-                                        onClick = viewModel::toggleFavourite,
-                                        colors = chromeColors
+                                    .graphicsLayer {
+                                        alpha =
+                                            if (shouldRenderChromeInOverlay) chromeOverlayAlpha else 1f
+                                    },
+                                title = {
+                                    AnimatedVisibility(
+                                        visible = isScrolled,
+                                        enter = fadeIn(),
+                                        exit = fadeOut()
                                     ) {
-                                        Icon(
-                                            imageVector = if (details.isFavourite) Icons.Filled.Favorite
-                                            else Icons.Outlined.FavoriteBorder,
-                                            contentDescription = stringResource(R.string.a11y_action_toggle_favorite),
-                                            tint = if (details.isFavourite) MaterialTheme.colorScheme.error
-                                            else chromeTint
+                                        Text(
+                                            text = appBarTitle,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            style = MaterialTheme.typography.titleLarge
                                         )
                                     }
-                                    IconButton(
-                                        onClick = { showShareImageSheet = true },
-                                        colors = chromeColors
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Share,
-                                            contentDescription = stringResource(R.string.action_share),
-                                            tint = chromeTint
-                                        )
+                                },
+                                navigationIcon = {
+                                    if (!LocalPaneIsRoot.current) {
+                                        IconButton(onClick = onBackClick, colors = chromeColors) {
+                                            Icon(
+                                                imageVector = navigationIcon,
+                                                contentDescription = stringResource(R.string.back),
+                                                tint = chromeTint
+                                            )
+                                        }
                                     }
-                                }
+                                },
+                                actions = {
+                                    // Favourite and share live here now. They used to be the two
+                                    // loudest controls on the page — a filled 56dp button and a
+                                    // full-width pill — above a page whose job is tracking.
+                                    (state as? DetailsUiState.Success)?.details?.let { details ->
+                                        AnimatedFavoriteButton(
+                                            isFavorite = details.isFavourite,
+                                            onClick = viewModel::toggleFavourite,
+                                            inactiveColor = chromeTint,
+                                            containerColor = bannerChromeContainer(overBanner),
+                                            boxSize = 40.dp
+                                        )
+                                        IconButton(
+                                            onClick = { showShareImageSheet = true },
+                                            colors = chromeColors
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Share,
+                                                contentDescription = stringResource(R.string.action_share),
+                                                tint = chromeTint
+                                            )
+                                        }
+                                    }
 
-                                // At a two-pane detail root the close (✕) sits on the trailing edge
-                                // (easy right-thumb reach) instead of a leading back arrow.
-                                if (LocalPaneIsRoot.current) {
-                                    IconButton(onClick = onBackClick, colors = chromeColors) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Close,
-                                            contentDescription = stringResource(R.string.pane_close),
-                                            tint = chromeTint
-                                        )
+                                    // At a two-pane detail root the close (✕) sits on the trailing edge
+                                    // (easy right-thumb reach) instead of a leading back arrow.
+                                    if (LocalPaneIsRoot.current) {
+                                        IconButton(onClick = onBackClick, colors = chromeColors) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Close,
+                                                contentDescription = stringResource(R.string.pane_close),
+                                                tint = chromeTint
+                                            )
+                                        }
                                     }
-                                }
-                            },
-                            colors = TopAppBarDefaults.topAppBarColors(
-                                // Animated by real scroll overlap (see overlappedFraction); no
-                                // scrollBehavior, whose nested-scroll bookkeeping surfaced the
-                                // bar during pull-to-refresh.
-                                containerColor = animateColorAsState(
-                                    if (isScrolled) MaterialTheme.colorScheme.surfaceContainer
-                                    else Color.Transparent,
-                                    label = "DetailsAppBarContainer"
-                                ).value,
-                                titleContentColor = MaterialTheme.colorScheme.onSurface,
-                                actionIconContentColor = MaterialTheme.colorScheme.onSurface
-                            ),
-                            // Root already insets below the status bar; don't add it again here.
-                            windowInsets = WindowInsets(0, 0, 0, 0)
-                        )
+                                },
+                                colors = TopAppBarDefaults.topAppBarColors(
+                                    // Animated by real scroll overlap (see overlappedFraction); no
+                                    // scrollBehavior, whose nested-scroll bookkeeping surfaced the
+                                    // bar during pull-to-refresh.
+                                    containerColor = animateColorAsState(
+                                        if (isScrolled) MaterialTheme.colorScheme.surfaceContainer
+                                        else Color.Transparent,
+                                        label = "DetailsAppBarContainer"
+                                    ).value,
+                                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                                    actionIconContentColor = MaterialTheme.colorScheme.onSurface
+                                )
+                            )
+                        }
                     }
-                }
-            ) { paddingValues ->
-                PullToRefreshBox(
-                    isRefreshing = isRefreshing,
-                    state = pullToRefreshState,
-                    onRefresh = rememberRateLimitedRefresh { viewModel.refresh() },
-                    indicator = {
-                        CustomPullToRefreshIndicator(
-                            isRefreshing = isRefreshing,
-                            state = pullToRefreshState,
-                            modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .windowInsetsPadding(WindowInsets.statusBars)
-                        )
-                    },
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(bottom = paddingValues.calculateBottomPadding())
-                ) {
-                    Box(
+                ) { paddingValues ->
+                    PullToRefreshBox(
+                        isRefreshing = isRefreshing,
+                        state = pullToRefreshState,
+                        onRefresh = rememberRateLimitedRefresh { viewModel.refresh() },
+                        indicator = {
+                            CustomPullToRefreshIndicator(
+                                isRefreshing = isRefreshing,
+                                state = pullToRefreshState,
+                                modifier = Modifier.align(Alignment.TopCenter)
+                            )
+                        },
                         modifier = Modifier
                             .fillMaxSize()
-                            // Note: We intentionally IGNORE top padding here to let the content
-                            // (specifically the header image) draw behind the transparent status bar.
-                            .sharedBounds(
-                                sharedContentState = rememberSharedContentState(key = containerKey),
-                                animatedVisibilityScope = animatedVisibilityScope,
-                                boundsTransform = { _, _ -> spatialSpec },
-                                clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(0.dp))
-                            )
+                            .padding(bottom = paddingValues.calculateBottomPadding())
                     ) {
-                        when (val state = uiState) {
-                            is DetailsUiState.Loading -> DetailsSkeletonContent(onBackClick = onBackClick)
-                        is DetailsUiState.Success -> {
-                            val context = LocalContext.current
-                            DetailsPageContent(
-                                details = state.details,
-                                sourceScreen = sourceScreen,
-                                listState = listState,
-                                selectedTab = selectedTab,
-                                onTabSelected = { selectedTab = it },
-                                following = following,
-                                hasMoreFollowing = hasMoreFollowing,
-                                cast = cast,
-                                staff = staff,
-                                onEnsureCastLoaded = viewModel::ensureCastLoaded,
-                                onLoadMoreCast = viewModel::loadMoreCast,
-                                onCastSortChange = viewModel::setCastSort,
-                                onEnsureStaffLoaded = viewModel::ensureStaffLoaded,
-                                onLoadMoreStaff = viewModel::loadMoreStaff,
-                                onStaffSortChange = viewModel::setStaffSort,
-                                mediaStats = mediaStats,
-                                onEnsureStatsLoaded = viewModel::ensureStatsLoaded,
-                                onRetryStats = viewModel::retryStats,
-                                onRankingClick = { ranking ->
-                                    viewModel.openDiscoverSearch(
-                                        rankingSearchFilters(
-                                            ranking,
-                                            isManga = state.details.type == com.anisync.android.type.MediaType.MANGA
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                // Note: We intentionally IGNORE top padding here to let the content
+                                // (specifically the header image) draw behind the transparent status bar.
+                                .sharedBounds(
+                                    sharedContentState = rememberSharedContentState(key = containerKey),
+                                    animatedVisibilityScope = animatedVisibilityScope,
+                                    boundsTransform = { _, _ -> spatialSpec },
+                                    clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(0.dp))
+                                )
+                        ) {
+                            when (val state = uiState) {
+                                is DetailsUiState.Loading -> DetailsSkeletonContent(onBackClick = onBackClick)
+                            is DetailsUiState.Success -> {
+                                val context = LocalContext.current
+                                DetailsPageContent(
+                                    details = state.details,
+                                    sourceScreen = sourceScreen,
+                                    listState = listState,
+                                    selectedTab = selectedTab,
+                                    onTabSelected = { selectedTab = it },
+                                    following = following,
+                                    hasMoreFollowing = hasMoreFollowing,
+                                    cast = cast,
+                                    staff = staff,
+                                    onEnsureCastLoaded = viewModel::ensureCastLoaded,
+                                    onLoadMoreCast = viewModel::loadMoreCast,
+                                    onCastSortChange = viewModel::setCastSort,
+                                    onEnsureStaffLoaded = viewModel::ensureStaffLoaded,
+                                    onLoadMoreStaff = viewModel::loadMoreStaff,
+                                    onStaffSortChange = viewModel::setStaffSort,
+                                    mediaStats = mediaStats,
+                                    onEnsureStatsLoaded = viewModel::ensureStatsLoaded,
+                                    onRetryStats = viewModel::retryStats,
+                                    onRankingClick = { ranking ->
+                                        viewModel.openDiscoverSearch(
+                                            rankingSearchFilters(
+                                                ranking,
+                                                isManga = state.details.type == com.anisync.android.type.MediaType.MANGA
+                                            )
                                         )
-                                    )
-                                },
-                                onGenreClick = { genre ->
-                                    viewModel.openDiscoverSearch(
-                                        genreSearchFilters(
-                                            genre,
-                                            isManga = state.details.type == com.anisync.android.type.MediaType.MANGA
+                                    },
+                                    onGenreClick = { genre ->
+                                        viewModel.openDiscoverSearch(
+                                            genreSearchFilters(
+                                                genre,
+                                                isManga = state.details.type == com.anisync.android.type.MediaType.MANGA
+                                            )
                                         )
-                                    )
-                                },
-                                onTagClick = { tag ->
-                                    viewModel.openDiscoverSearch(
-                                        tagSearchFilters(
-                                            tag.name,
-                                            isManga = state.details.type == com.anisync.android.type.MediaType.MANGA
+                                    },
+                                    onTagClick = { tag ->
+                                        viewModel.openDiscoverSearch(
+                                            tagSearchFilters(
+                                                tag.name,
+                                                isManga = state.details.type == com.anisync.android.type.MediaType.MANGA
+                                            )
                                         )
-                                    )
-                                },
-                                onRelationClick = navigateToRelationDetails,
-                                onCharacterClick = navigateToCharacterDetails,
-                                onStaffClick = navigateToStaffDetails,
-                                onVoiceActorClick = navigateToStaffDetails,
-                                onStudioClick = onStudioClick,
-                                onRelatedSeeAllClick = {
-                                    shouldKeepChromeOverlayForReturn = true
-                                    hasObservedDetailsReEnter = false
-                                    onRelatedSeeAllClick(
-                                        state.details.id,
-                                        state.details.getTitle(titleLanguage)
-                                    )
-                                },
-                                onRecommendationsSeeAllClick = {
-                                    shouldKeepChromeOverlayForReturn = true
-                                    hasObservedDetailsReEnter = false
-                                    onRecommendationsSeeAllClick(
-                                        state.details.id,
-                                        state.details.getTitle(titleLanguage)
-                                    )
-                                },
-                                onThemesSeeAllClick = {
-                                    shouldKeepChromeOverlayForReturn = true
-                                    hasObservedDetailsReEnter = false
-                                    onThemesSeeAllClick(
-                                        state.details.id,
-                                        state.details.getTitle(titleLanguage),
-                                        state.details.coverageEpisodeCount,
-                                        state.details.bannerUrl ?: state.details.coverUrl
-                                    )
-                                },
-                                themesState = themesState,
-                                onRetryThemes = themesViewModel::retry,
-                                onWriteReviewClick = {
-                                    onWriteReviewClick(
-                                        state.details.id,
-                                        state.details.getTitle(titleLanguage)
-                                    )
-                                },
-                                onReviewClick = { reviewId ->
-                                    shouldKeepChromeOverlayForReturn = true
-                                    hasObservedDetailsReEnter = false
-                                    onReviewClick(reviewId)
-                                },
-                                onEditNotes = viewModel::openEditSheet,
-                                discussions = discussions,
-                                onDiscussionClick = { threadId, threadTitle ->
-                                    shouldKeepChromeOverlayForReturn = true
-                                    hasObservedDetailsReEnter = false
-                                    onDiscussionClick(threadId, threadTitle)
-                                },
-                                onViewAllDiscussions = {
-                                    shouldKeepChromeOverlayForReturn = true
-                                    hasObservedDetailsReEnter = false
-                                    onViewAllDiscussions(
-                                        state.details.id,
-                                        state.details.getTitle(titleLanguage)
-                                    )
-                                },
-                                onStartDiscussion = {
-                                    onStartDiscussion(
-                                        state.details.id,
-                                        state.details.getTitle(titleLanguage),
-                                        state.details.coverUrl
-                                    )
-                                },
-                                onRecommendMedia = viewModel::recommendMedia,
-                                onUserClick = onUserClick,
-                                onStatusSelect = { status ->
-                                    viewModel.saveMediaListEntry(
-                                        status,
-                                        state.details.listProgress ?: 0
-                                    )
-                                },
-                                onProgressChange = { progress ->
-                                    viewModel.saveMediaListEntry(
-                                        state.details.listStatus ?: LibraryStatus.CURRENT,
-                                        progress.coerceAtLeast(0)
-                                    )
-                                },
-                                onEditEntry = viewModel::openEditSheet,
-                                onRemoveEntry = viewModel::deleteMediaListEntry,
-                                onRateRecommendation = viewModel::rateRecommendation,
-                                sharedTransitionScope = sharedTransitionScope,
-                                animatedVisibilityScope = animatedVisibilityScope,
-                                titleLanguage = titleLanguage
+                                    },
+                                    onRelationClick = navigateToRelationDetails,
+                                    onCharacterClick = navigateToCharacterDetails,
+                                    onStaffClick = navigateToStaffDetails,
+                                    onVoiceActorClick = navigateToStaffDetails,
+                                    onStudioClick = onStudioClick,
+                                    onRelatedSeeAllClick = {
+                                        shouldKeepChromeOverlayForReturn = true
+                                        hasObservedDetailsReEnter = false
+                                        onRelatedSeeAllClick(
+                                            state.details.id,
+                                            state.details.getTitle(titleLanguage)
+                                        )
+                                    },
+                                    onRecommendationsSeeAllClick = {
+                                        shouldKeepChromeOverlayForReturn = true
+                                        hasObservedDetailsReEnter = false
+                                        onRecommendationsSeeAllClick(
+                                            state.details.id,
+                                            state.details.getTitle(titleLanguage)
+                                        )
+                                    },
+                                    onThemesSeeAllClick = {
+                                        shouldKeepChromeOverlayForReturn = true
+                                        hasObservedDetailsReEnter = false
+                                        onThemesSeeAllClick(
+                                            state.details.id,
+                                            state.details.getTitle(titleLanguage),
+                                            state.details.coverageEpisodeCount,
+                                            state.details.bannerUrl ?: state.details.coverUrl
+                                        )
+                                    },
+                                    themesState = themesState,
+                                    onRetryThemes = themesViewModel::retry,
+                                    onWriteReviewClick = {
+                                        onWriteReviewClick(
+                                            state.details.id,
+                                            state.details.getTitle(titleLanguage)
+                                        )
+                                    },
+                                    onReviewClick = { reviewId ->
+                                        shouldKeepChromeOverlayForReturn = true
+                                        hasObservedDetailsReEnter = false
+                                        onReviewClick(reviewId)
+                                    },
+                                    onEditNotes = viewModel::openEditSheet,
+                                    discussions = discussions,
+                                    onDiscussionClick = { threadId, threadTitle ->
+                                        shouldKeepChromeOverlayForReturn = true
+                                        hasObservedDetailsReEnter = false
+                                        onDiscussionClick(threadId, threadTitle)
+                                    },
+                                    onViewAllDiscussions = {
+                                        shouldKeepChromeOverlayForReturn = true
+                                        hasObservedDetailsReEnter = false
+                                        onViewAllDiscussions(
+                                            state.details.id,
+                                            state.details.getTitle(titleLanguage)
+                                        )
+                                    },
+                                    onStartDiscussion = {
+                                        onStartDiscussion(
+                                            state.details.id,
+                                            state.details.getTitle(titleLanguage),
+                                            state.details.coverUrl
+                                        )
+                                    },
+                                    onRecommendMedia = viewModel::recommendMedia,
+                                    onUserClick = onUserClick,
+                                    onStatusSelect = { status ->
+                                        viewModel.saveMediaListEntry(
+                                            status,
+                                            state.details.listProgress ?: 0
+                                        )
+                                    },
+                                    onProgressChange = { progress ->
+                                        viewModel.saveMediaListEntry(
+                                            state.details.listStatus ?: LibraryStatus.CURRENT,
+                                            progress.coerceAtLeast(0)
+                                        )
+                                    },
+                                    onEditEntry = viewModel::openEditSheet,
+                                    onRemoveEntry = viewModel::deleteMediaListEntry,
+                                    onRateRecommendation = viewModel::rateRecommendation,
+                                    sharedTransitionScope = sharedTransitionScope,
+                                    animatedVisibilityScope = animatedVisibilityScope,
+                                    titleLanguage = titleLanguage
+                                )
+                            }
+
+                            is DetailsUiState.Error -> ErrorStateContent(
+                                message = state.message,
+                                onBackClick = onBackClick
                             )
-                        }
-
-                        is DetailsUiState.Error -> ErrorStateContent(
-                            message = state.message,
-                            onBackClick = onBackClick
-                        )
+                            }
                         }
                     }
                 }
-            }
 
-            // Play-Store-style scrim behind the transparent status bar so the system clock /
-            // battery / back arrow stay legible over a bright banner. Fades out as the opaque
-            // app bar scrolls in, and is suppressed on the error page (no banner there).
-            if (bannerVisible) {
-                StatusBarScrim(
-                    alpha = 1f - overlappedFraction,
-                    modifier = Modifier.align(Alignment.TopCenter)
-                )
-            }
-        }
-
-        if (showEditSheet) {
-            draftEntry?.let { entry ->
-                val details = (uiState as? DetailsUiState.Success)?.details
-                val mediaType = details?.type ?: entry.type
-                val availableLists = when (mediaType) {
-                    com.anisync.android.type.MediaType.ANIME -> animeCustomLists
-                    com.anisync.android.type.MediaType.MANGA -> mangaCustomLists
-                    else -> emptyList()
+                // Play-Store-style scrim behind the transparent status bar so the system clock /
+                // battery / back arrow stay legible over a bright banner. Fades out as the opaque
+                // app bar scrolls in, and is suppressed on the error page (no banner there).
+                if (bannerVisible) {
+                    StatusBarScrim(
+                        alpha = 1f - overlappedFraction,
+                        modifier = Modifier.align(Alignment.TopCenter)
+                    )
                 }
+            }
+
+            if (showEditSheet) {
+                draftEntry?.let { entry ->
+                    val details = (uiState as? DetailsUiState.Success)?.details
+                    val mediaType = details?.type ?: entry.type
+                    val availableLists = when (mediaType) {
+                        com.anisync.android.type.MediaType.ANIME -> animeCustomLists
+                        com.anisync.android.type.MediaType.MANGA -> mangaCustomLists
+                        else -> emptyList()
+                    }
                 
-                com.anisync.android.presentation.library.components.EditLibraryEntrySheet(
-                    entry = entry,
-                    titleLanguage = titleLanguage,
-                    scoreFormat = userScoreFormat,
-                    availableCustomLists = availableLists,
-                    advancedScoringCategories = if (mediaType == com.anisync.android.type.MediaType.MANGA) {
-                        mangaAdvancedScoring
-                    } else {
-                        animeAdvancedScoring
-                    },
-                    onDismiss = viewModel::closeEditSheet,
-                    onSave = viewModel::saveLibraryEntry,
-                    onDelete = {
-                        viewModel.deleteMediaListEntry()
-                        viewModel.closeEditSheet()
-                    }
-                )
+                    com.anisync.android.presentation.library.components.EditLibraryEntrySheet(
+                        entry = entry,
+                        titleLanguage = titleLanguage,
+                        scoreFormat = userScoreFormat,
+                        availableCustomLists = availableLists,
+                        advancedScoringCategories = if (mediaType == com.anisync.android.type.MediaType.MANGA) {
+                            mangaAdvancedScoring
+                        } else {
+                            animeAdvancedScoring
+                        },
+                        onDismiss = viewModel::closeEditSheet,
+                        onSave = viewModel::saveLibraryEntry,
+                        onDelete = {
+                            viewModel.deleteMediaListEntry()
+                            viewModel.closeEditSheet()
+                        }
+                    )
+                }
             }
-        }
 
-        if (showShareImageSheet) {
-            (uiState as? DetailsUiState.Success)?.details?.let { details ->
-                ShareImageSheet(
-                    onDismiss = { showShareImageSheet = false },
-                    link = AniListUrls.mediaUrl(details.id, details.type),
-                    seedColor = parseCoverColor(details.coverColor),
-                    supportsPrivacy = true,
-                    templates = listOf(ShareCardTemplate.STANDARD, ShareCardTemplate.HERO),
-                ) {
-                    MediaShareCard(details = details, scoreFormat = userScoreFormat)
+            if (showShareImageSheet) {
+                (uiState as? DetailsUiState.Success)?.details?.let { details ->
+                    ShareImageSheet(
+                        onDismiss = { showShareImageSheet = false },
+                        link = AniListUrls.mediaUrl(details.id, details.type),
+                        seedColor = parseCoverColor(details.coverColor),
+                        supportsPrivacy = true,
+                        templates = listOf(ShareCardTemplate.STANDARD, ShareCardTemplate.HERO),
+                    ) {
+                        MediaShareCard(details = details, scoreFormat = userScoreFormat)
+                    }
                 }
             }
         }
     }
+}
+
+/**
+ * Wraps the media page in a palette seeded from its own cover art, when the "Colors from artwork"
+ * appearance preference is on. Titles AniList ships no cover color for, and colors too washed out
+ * to read as a hue, fall through to the app theme. The viewer's palette style, light/dark choice
+ * and AMOLED setting are all preserved.
+ */
+@Composable
+private fun MediaArtworkThemeOverride(
+    coverColor: String?,
+    content: @Composable () -> Unit,
+) {
+    val appSettings = LocalAppSettings.current
+    val enabled by appSettings.mediaArtworkTheming.collectAsStateWithLifecycle()
+    val themeMode by appSettings.themeMode.collectAsStateWithLifecycle()
+    val paletteStyle by appSettings.paletteStyle.collectAsStateWithLifecycle()
+    val amoledEnabled by appSettings.amoledEnabled.collectAsStateWithLifecycle()
+    val scheme = mediaArtworkColorScheme(
+        seed = if (enabled) mediaArtworkSeedColor(coverColor) else null,
+        darkTheme = themeMode.resolveDarkTheme(),
+        amoled = amoledEnabled,
+        paletteStyle = paletteStyle,
+    )
+    MaterialTheme(colorScheme = scheme, content = content)
 }
 
 @Composable
@@ -951,8 +967,9 @@ fun DetailsPageContent(
         details.reviews.distinctBy { it.id }.take(5)
     }
 
-    // ImageViewerDialog state for cover/banner image
+    // ImageViewerDialog state for cover/banner image; it opens on whichever was tapped.
     var showImageViewer by rememberSaveable { mutableStateOf(false) }
+    var viewerIndex by rememberSaveable { mutableIntStateOf(0) }
     val viewerImages = remember(details.cover.url() ?: details.coverUrl, details.bannerUrl) {
         listOfNotNull(details.coverUrl, details.bannerUrl)
     }
@@ -1044,7 +1061,8 @@ fun DetailsPageContent(
     // app bar, so the two never read as duplicates. Both positions come from real measurements, not
     // a scroll-offset lookup, so a resize can't make them drift.
     val density = LocalDensity.current
-    val dockPx = with(density) { 64.dp.roundToPx() }.toFloat()
+    // The app bar draws under the status bar, so the dock line is its full height, inset included.
+    val dockPx = with(density) { (statusBarInset() + 64.dp).roundToPx() }.toFloat()
     var contentTopWindow by remember { mutableFloatStateOf(0f) }
     var inlineTabsTopWindow by remember { mutableFloatStateOf(Float.MAX_VALUE) }
     val tabsDocked by remember {
@@ -1070,7 +1088,14 @@ fun DetailsPageContent(
                     sharedTransitionScope = sharedTransitionScope,
                     animatedVisibilityScope = animatedVisibilityScope,
                     titleLanguage = titleLanguage,
-                    onCoverClick = { showImageViewer = true }
+                    onCoverClick = {
+                        viewerIndex = 0
+                        showImageViewer = true
+                    },
+                    onBannerClick = {
+                        viewerIndex = viewerImages.indexOf(details.bannerUrl).coerceAtLeast(0)
+                        showImageViewer = true
+                    }
                 )
             }
 
@@ -1622,7 +1647,7 @@ fun DetailsPageContent(
     if (showImageViewer) {
         ImageViewerDialog(
             imageUrls = viewerImages,
-            initialIndex = 0,
+            initialIndex = viewerIndex,
             onDismiss = { showImageViewer = false }
         )
     }
@@ -1647,6 +1672,14 @@ fun DetailsPageContent(
 private val MediaDetails.headerBanner: String?
     get() = bannerUrl ?: trailer?.thumbnail
 
+/** Banner artwork height below the status bar; the bleed is added on top. */
+private val BannerHeight = 220.dp
+
+/** Zero inside a two-pane detail pane, where the host has already cleared the bar. */
+@Composable
+private fun statusBarInset(): Dp =
+    WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
 @OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun PageHeaderSection(
@@ -1656,6 +1689,7 @@ fun PageHeaderSection(
     animatedVisibilityScope: AnimatedVisibilityScope,
     titleLanguage: TitleLanguage,
     onCoverClick: () -> Unit = {},
+    onBannerClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -1689,21 +1723,32 @@ fun PageHeaderSection(
         bannerModel != null && bannerModel == details.trailer?.thumbnail
     }
 
+    // The header carries the status-bar height so the artwork fills it and the rest stays put.
+    val topInset = statusBarInset()
+
     Box(
         modifier = modifier
             .fillMaxWidth()
             // Nothing to show means no banner rather than the cover stretched across the top as a
             // stand-in, so the header shrinks to the cover and the title.
-            .height(if (bannerModel != null) 330.dp else 250.dp)
+            .height(topInset + if (bannerModel != null) 330.dp else 250.dp)
     ) {
-        // 1. Banner Image Layer
+        // 1. Banner Image Layer. Only real artwork opens the viewer: the trailer thumbnail that
+        // stands in for a missing banner isn't in the viewer's list.
         if (bannerModel != null) {
+            val isArtwork = details.bannerUrl != null
             BannerImage(
                 model = bannerModel,
                 needsZoom = needsZoom,
+                contentDescription = if (isArtwork) stringResource(R.string.cd_media_banner)
+                else null,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(220.dp)
+                    .height(topInset + BannerHeight)
+                    .then(
+                        if (isArtwork) Modifier.clickable(onClick = onBannerClick)
+                        else Modifier
+                    )
             )
         }
 
@@ -1720,7 +1765,10 @@ fun PageHeaderSection(
                 },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(end = dimensionResource(R.dimen.spacing_medium), top = 104.dp)
+                    .padding(
+                        end = dimensionResource(R.dimen.spacing_medium),
+                        top = topInset + 104.dp
+                    )
             )
         }
 
@@ -1750,7 +1798,8 @@ fun PageHeaderSection(
 private fun BannerImage(
     model: Any?,
     needsZoom: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null
 ) {
     val contentScale = remember(needsZoom) {
         if (needsZoom) {
@@ -1777,7 +1826,7 @@ private fun BannerImage(
     Box(modifier = modifier.clip(RectangleShape)) {
         AsyncImage(
             model = model,
-            contentDescription = null,
+            contentDescription = contentDescription,
             contentScale = contentScale,
             alignment = Alignment.Center,
             modifier = Modifier
@@ -1818,23 +1867,19 @@ private fun BannerGradients(themeBackground: Color) {
 }
 
 /**
- * Dark top-to-transparent gradient pinned behind the status bar, mirroring the Google Play Store
- * detail page. Keeps the white system icons (and back arrow) readable over a bright banner while
- * the app bar is transparent; [alpha] is driven to 0 as the opaque app bar scrolls in.
+ * Dark top-to-transparent gradient over the status bar, mirroring the Google Play Store detail page.
+ * Keeps the system icons (and the back arrow) readable over a bright banner while the app bar is
+ * transparent; [alpha] is driven to 0 as the opaque app bar scrolls in.
  */
 @Composable
 private fun StatusBarScrim(alpha: Float, modifier: Modifier = Modifier) {
-    // Root insets below the status bar, so this banner scrim only needs its own short height.
-    val scrimHeight = 28.dp
-    val scrimBrush = remember {
-        Brush.verticalGradient(colors = listOf(Color.Black.copy(alpha = 0.45f), Color.Transparent))
-    }
+    val scrimHeight = bannerScrimHeight()
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(scrimHeight)
             .graphicsLayer { this.alpha = alpha }
-            .background(scrimBrush)
+            .background(bannerScrimBrush(scrimHeight))
     )
 }
 

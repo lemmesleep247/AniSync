@@ -58,6 +58,7 @@ interface LibraryRepository {
         entryIds: List<Int>,
         status: LibraryStatus? = null,
         score: Double? = null,
+        priority: Int? = null,
         isPrivate: Boolean? = null
     ): Result<Unit>
 

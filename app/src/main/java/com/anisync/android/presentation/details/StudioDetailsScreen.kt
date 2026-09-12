@@ -72,6 +72,9 @@ import com.anisync.android.domain.StudioDetails
 import com.anisync.android.domain.StudioMediaEntry
 import com.anisync.android.domain.url
 import com.anisync.android.presentation.components.AnimatedFavoriteButton
+import com.anisync.android.presentation.components.bannerChromeColors
+import com.anisync.android.presentation.components.bannerChromeContainer
+import com.anisync.android.presentation.components.bannerChromeTint
 import com.anisync.android.presentation.components.HeaderLevel
 import com.anisync.android.presentation.components.SectionHeader
 import com.anisync.android.presentation.details.components.AppearanceRow
@@ -149,10 +152,9 @@ fun StudioDetailsScreen(
         topBar = {
             if (wideLayout) return@Scaffold
             val title = details?.name ?: ""
-            val iconTint by animateColorAsState(
-                if (isScrolled) MaterialTheme.colorScheme.onSurface else Color.White,
-                label = "studioIconTint"
-            )
+            val overBanner = !isScrolled
+            val iconTint = bannerChromeTint(overBanner)
+            val chromeColors = bannerChromeColors(overBanner)
 
             TopAppBar(
                 title = {
@@ -171,7 +173,7 @@ fun StudioDetailsScreen(
                 },
                 navigationIcon = {
                     if (!LocalPaneIsRoot.current) {
-                        IconButton(onClick = onBackClick) {
+                        IconButton(onClick = onBackClick, colors = chromeColors) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = stringResource(R.string.back),
@@ -188,12 +190,15 @@ fun StudioDetailsScreen(
                         AnimatedFavoriteButton(
                             isFavorite = details.isFavourite,
                             onClick = viewModel::toggleFavourite,
-                            inactiveColor = iconTint
+                            inactiveColor = iconTint,
+                            containerColor = bannerChromeContainer(overBanner),
+                            boxSize = 40.dp
                         )
                     }
                     IconButton(
                         onClick = { viewModel.shareStudio(context) },
-                        enabled = details != null
+                        enabled = details != null,
+                        colors = chromeColors
                     ) {
                         Icon(
                             imageVector = Icons.Default.Share,
@@ -204,7 +209,7 @@ fun StudioDetailsScreen(
                     // At a two-pane detail root the close (✕) is the trailing-most action
                     // (right-thumb reach) in place of a leading back arrow.
                     if (LocalPaneIsRoot.current) {
-                        IconButton(onClick = onBackClick) {
+                        IconButton(onClick = onBackClick, colors = chromeColors) {
                             Icon(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = stringResource(R.string.pane_close),
@@ -230,7 +235,7 @@ fun StudioDetailsScreen(
         ) {
             when (val state = uiState) {
                 is StudioDetailsUiState.Loading -> {
-                    CharacterSkeletonContent(onBackClick = onBackClick)
+                    CharacterSkeletonContent()
                 }
 
                 is StudioDetailsUiState.Success -> {

@@ -361,6 +361,8 @@
     <string name="avatar_shape_show_frame_desc">Draws a ring and background behind avatars</string>
     <string name="setting_respect_profile_colors">Use profile colors</string>
     <string name="setting_respect_profile_colors_desc">Tint the app with a user\'s chosen color when you visit their profile. Profiles using the default color keep your theme.</string>
+    <string name="setting_media_artwork_theming">Colors from artwork</string>
+    <string name="setting_media_artwork_theming_desc">Tint an anime or manga page with the colors of its own cover art. Titles with no artwork color keep your theme.</string>
     <string name="avatar_shape_clover">8-Leaf Clover</string>
     <string name="avatar_shape_clover_desc">The default 8-leaf clover shape</string>
     <string name="avatar_shape_circle">Circle</string>
@@ -1863,6 +1865,7 @@
     <string name="cd_trending_carousel">Trending carousel</string>
     <string name="cd_clear_media_filter">Clear media filter</string>
     <string name="cd_media_cover">Media cover</string>
+    <string name="cd_media_banner">Media banner</string>
     <string name="cd_show_tab">Show tab</string>
     <string name="cd_hide_tab">Hide tab</string>
     <string name="cd_cover_quality_preview">Cover quality preview</string>
@@ -2084,6 +2087,14 @@
     <string name="library_adding_title">Adding %1$d entries to %2$s</string>
     <string name="library_bulk_per_entry_explainer">AniList handles one entry per request here, so this runs at the client rate limit of 25 a minute. Leaving the screen keeps it running.</string>
     <string name="library_bulk_progress">%1$d of %2$d done</string>
+    <!-- Watch priority -->
+    <string name="priority">Priority</string>
+    <string name="priority_low">Low</string>
+    <string name="priority_medium">Medium</string>
+    <string name="priority_high">High</string>
+    <string name="library_set_priority">Set priority</string>
+    <string name="library_priority_count_to">Set %1$d to %2$s</string>
+    <string name="sort_priority">Priority</string>
     <!-- Library empty states -->
     <string name="library_empty_all_title">Your library is empty</string>
     <string name="library_empty_all_desc">Anything you track on AniList turns up here.</string>

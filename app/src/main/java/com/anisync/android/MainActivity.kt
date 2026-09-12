@@ -23,13 +23,10 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.AlertDialog
@@ -51,7 +48,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -68,7 +64,6 @@ import com.anisync.android.presentation.login.LoginScreen
 import com.anisync.android.presentation.onboarding.OnboardingScreen
 import com.anisync.android.presentation.settings.UpdateDialog
 import com.anisync.android.presentation.util.LocalAdaptiveInfo
-import com.anisync.android.presentation.util.LocalStatusBarColor
 import com.anisync.android.presentation.util.LocalAppSettings
 import com.anisync.android.presentation.util.LocalGridColumnCount
 import com.anisync.android.presentation.util.LocalGridColumnsAuto
@@ -319,36 +314,14 @@ class MainActivity : AppCompatActivity() {
                             modifier = Modifier.fillMaxSize(),
                             color = MaterialTheme.colorScheme.background
                         ) {
-                          // Holder for the status-bar protection color: the active layer (MainScreen)
-                          // publishes a tone, the protection Spacer below reads it. The Spacer is a
-                          // sibling of the content, so a CompositionLocal bridges the two subtrees.
-                          val statusBarColor = remember { mutableStateOf(Color.Unspecified) }
-
-                          // First run, or a Developer Tools replay, takes the whole window: the
-                          // sign-in handoff is the flow's own first step, and its artwork runs under
-                          // the status bar. So it opts out of both the inset padding and the
-                          // status-bar protection strip below, and handles its own insets per step.
+                          // Edge-to-edge: nothing padded or consumed here, so each screen sees the
+                          // real insets and protects the bars with its own chrome.
                           val onboardingCompleted by appSettings.onboardingCompleted
                               .collectAsStateWithLifecycle()
                           val onboardingReplay by appSettings.onboardingReplay
                               .collectAsStateWithLifecycle()
                           val onboardingActive = !onboardingCompleted || onboardingReplay
-                          CompositionLocalProvider(LocalStatusBarColor provides statusBarColor) {
                           Box(modifier = Modifier.fillMaxSize()) {
-                          // Keep all content out from under the system status bar: pad it down by the
-                          // status-bar inset (which also CONSUMES it, so child screens don't re-apply
-                          // it); the freed strip is filled by the protection Spacer below.
-                          Box(
-                              modifier = Modifier
-                                  .fillMaxSize()
-                                  .then(
-                                      if (onboardingActive) {
-                                          Modifier
-                                      } else {
-                                          Modifier.windowInsetsPadding(WindowInsets.statusBars)
-                                      }
-                                  )
-                          ) {
                             // Cold Flow — seed from the account store so a logged-in cold start
                             // doesn't flash LoginScreen for a frame.
                             val isLoggedIn by authRepository.isLoggedIn.collectAsStateWithLifecycle(
@@ -438,29 +411,8 @@ class MainActivity : AppCompatActivity() {
                                 }
                             }
 
-                          }
-
-                            // M3 status-bar protection: an opaque bar filling the status-bar strip
-                            // (surfaceContainer, per the Android system-bars guidance), drawn above the
-                            // padded content so nothing shows under the system status bar.
-                            if (!onboardingActive) {
-                                Spacer(
-                                    modifier = Modifier
-                                        .align(Alignment.TopCenter)
-                                        .fillMaxWidth()
-                                        .windowInsetsTopHeight(WindowInsets.statusBars)
-                                        .background(
-                                            statusBarColor.value.takeOrElse {
-                                                MaterialTheme.colorScheme.surfaceContainer
-                                            }
-                                        )
-                                )
-                            }
-
-                            // App-lock privacy gate: drawn above the content AND the status-bar strip
-                            // so nothing shows while locked. No-op when the feature is off/unlocked.
+                            // Drawn above everything so nothing shows while locked.
                             com.anisync.android.presentation.security.AppLockGate(appLockManager)
-                          }
                           }
                         }
                     }

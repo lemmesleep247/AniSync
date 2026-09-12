@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Colorize
 import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.runtime.Composable
@@ -29,7 +30,8 @@ import com.anisync.android.ui.theme.resolveDarkTheme
 
 /**
  * Theme subscreen — the app's full theming hub: live preview, color scheme + palette style, custom
- * seed color, light/dark/system mode, AMOLED toggle, and the "use profile colors" preference.
+ * seed color, light/dark/system mode, AMOLED toggle, and the two "borrow someone else's colors"
+ * preferences (profile colors, media artwork colors).
  */
 @Composable
 fun ThemeScreen(
@@ -41,6 +43,7 @@ fun ThemeScreen(
     val themeMode = uiState.themeMode
     val amoledEnabled = uiState.amoledEnabled
     val respectUserProfileColors = uiState.respectUserProfileColors
+    val mediaArtworkTheming = uiState.mediaArtworkTheming
     val selectedPaletteId = uiState.selectedPaletteId
     val customSeedColor = uiState.customSeedColor
     val paletteStyle = uiState.paletteStyle
@@ -158,6 +161,16 @@ fun ThemeScreen(
                 checked = respectUserProfileColors,
                 onCheckedChange = {
                     viewModel.onAction(SettingsAction.SetRespectUserProfileColors(it))
+                }
+            )
+
+            SwitchSettingsItem(
+                icon = Icons.Default.Colorize,
+                title = stringResource(R.string.setting_media_artwork_theming),
+                subtitle = stringResource(R.string.setting_media_artwork_theming_desc),
+                checked = mediaArtworkTheming,
+                onCheckedChange = {
+                    viewModel.onAction(SettingsAction.SetMediaArtworkTheming(it))
                 }
             )
         }

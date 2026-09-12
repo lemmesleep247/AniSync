@@ -20,6 +20,12 @@ import com.anisync.android.data.local.entity.UserProfileEntity
  *
  * Version History:
  * ─────────────────────────────────────────────────────────────────────────────
+ * v28 (Sep 2026):
+ *   - Added field to library_entries:
+ *     • priority - raw AniList MediaList.priority, shown as Low/Medium/High and
+ *       sortable. Defaults to 0, which is both "Low" and "never set" on the wire,
+ *       so existing rows read correctly without a backfill. Auto-migration.
+ *
  * v25 (Aug 2026):
  *   - Added fields to library_entries:
  *     • progressVolumes - volumes read, manga only, null until one is recorded
@@ -118,7 +124,7 @@ import com.anisync.android.data.local.entity.UserProfileEntity
         SavedForumThreadEntity::class,
         MediaThemesEntity::class
     ],
-    version = 27,
+    version = 28,
     exportSchema = true,
     autoMigrations = [
         androidx.room.AutoMigration(from = 2, to = 3),
@@ -143,7 +149,8 @@ import com.anisync.android.data.local.entity.UserProfileEntity
         androidx.room.AutoMigration(from = 23, to = 24),
         androidx.room.AutoMigration(from = 24, to = 25),
         androidx.room.AutoMigration(from = 25, to = 26),
-        androidx.room.AutoMigration(from = 26, to = 27)
+        androidx.room.AutoMigration(from = 26, to = 27),
+        androidx.room.AutoMigration(from = 27, to = 28)
     ]
 )
 @TypeConverters(Converters::class)

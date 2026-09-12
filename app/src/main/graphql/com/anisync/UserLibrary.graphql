@@ -61,6 +61,7 @@ query GetUserLibrary($username: String!, $type: MediaType!) {
           month
           day
         }
+        priority
         private
         hiddenFromStatusLists
         updatedAt

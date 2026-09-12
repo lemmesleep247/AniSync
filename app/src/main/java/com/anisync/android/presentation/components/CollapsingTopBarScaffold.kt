@@ -63,7 +63,6 @@ import androidx.compose.ui.unit.sp
 import com.anisync.android.R
 import com.anisync.android.presentation.util.LocalAdaptiveInfo
 import com.anisync.android.presentation.util.LocalPaneIsRoot
-import com.anisync.android.presentation.util.LocalStatusBarColor
 import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.roundToInt
 
@@ -113,11 +112,10 @@ fun CollapsingTopBarScaffold(
 ) {
     val density = LocalDensity.current
 
-    // The app root already insets content below the system status bar (and consumes the inset), so
-    // the collapsing bar no longer reserves the status-bar height itself.
-    val statusBarHeight = 0.dp
+    // The bar protects the status bar: it reserves the height and fills it with its own colour.
+    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val minTopBarHeight = 64.dp + statusBarHeight
-    val maxTopBarHeight = if (title.length > 18) 200.dp else 170.dp
+    val maxTopBarHeight = (if (title.length > 18) 200.dp else 170.dp) + statusBarHeight
 
     val minTopBarHeightPx = with(density) { minTopBarHeight.toPx() }
     val maxTopBarHeightPx = with(density) { maxTopBarHeight.toPx() }
@@ -223,19 +221,6 @@ fun CollapsingTopBarScaffold(
         collapseFraction
     )
 
-    // Publish the bar's live color to the global status-bar scrim (MainActivity) so the system
-    // status bar tracks the hero bar instead of showing a fixed surfaceContainer band: `background`
-    // while expanded, lerping to `surfaceContainer` as it collapses. Gated to the bottom-bar layouts
-    // — on rail/wide the single full-width strip stays the rail-matching default MainScreen sets,
-    // since one strip can't match both the rail and the content pane.
-    val adaptive = LocalAdaptiveInfo.current
-    val statusBarColorHolder = LocalStatusBarColor.current
-    val publishToStatusBar = adaptive.isCompact || adaptive.isCompactHeight
-    LaunchedEffect(publishToStatusBar, barBackgroundColor) {
-        statusBarColorHolder.value =
-            if (publishToStatusBar) barBackgroundColor else Color.Unspecified
-    }
-
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -320,9 +305,8 @@ fun CollapsibleCommonTopBar(
     collapsedTitleStartPadding: Dp = 68.dp,
 ) {
     val density = LocalDensity.current
-    // The app root already insets content below the system status bar (and consumes the inset), so
-    // the collapsing bar no longer reserves the status-bar height itself.
-    val statusBarHeight = 0.dp
+    // Every control in the bar starts below the status bar.
+    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val backgroundColor = androidx.compose.ui.graphics.lerp(
         containerColor,
         scrolledContainerColor,

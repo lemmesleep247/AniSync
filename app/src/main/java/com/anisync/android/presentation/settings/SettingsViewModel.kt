@@ -213,8 +213,14 @@ class SettingsViewModel @Inject constructor(
         fontPlaygroundFlow,
         appSettings.amoledEnabled,
         appSettings.appLockEnabled,
-    ) { core, fontPlayground, amoled, appLock ->
-        core.copy(fontPlayground = fontPlayground, amoledEnabled = amoled, appLockEnabled = appLock)
+        appSettings.mediaArtworkTheming,
+    ) { core, fontPlayground, amoled, appLock, artworkTheming ->
+        core.copy(
+            fontPlayground = fontPlayground,
+            amoledEnabled = amoled,
+            appLockEnabled = appLock,
+            mediaArtworkTheming = artworkTheming
+        )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -237,6 +243,7 @@ class SettingsViewModel @Inject constructor(
             is SettingsAction.SetAvatarBackgroundEnabled -> appSettings.setAvatarBackgroundEnabled(action.enabled)
             is SettingsAction.SetDisableAvatarShapeProfile -> appSettings.setDisableAvatarShapeProfile(action.disabled)
             is SettingsAction.SetRespectUserProfileColors -> appSettings.setRespectUserProfileColors(action.enabled)
+            is SettingsAction.SetMediaArtworkTheming -> appSettings.setMediaArtworkTheming(action.enabled)
             is SettingsAction.SetShowAdultContent -> appSettings.setShowAdultContent(action.enabled)
             is SettingsAction.SetPreferredStreamingService -> appSettings.setPreferredStreamingService(
                 action.service

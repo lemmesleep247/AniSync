@@ -1,6 +1,9 @@
 package com.anisync.android.presentation.profile.components
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -62,19 +65,22 @@ fun ProfileTopSection(
     onAccountSwitchClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    // The banner carries the status-bar height so everything below it stays put.
+    val bannerHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + BannerHeight
+
     Box(modifier = modifier.fillMaxWidth()) {
         ProfileBannerSurface(
             profile = profile,
             isOwnProfile = isOwnProfile,
             topActionIcon = topActionIcon,
             onTopActionClick = onTopActionClick,
-            height = BannerHeight
+            height = bannerHeight
         )
 
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = BannerHeight - CardOverlap),
+                .padding(top = bannerHeight - CardOverlap),
             shape = ContentCardShape,
             color = MaterialTheme.colorScheme.background,
             tonalElevation = 0.dp
@@ -121,7 +127,7 @@ fun ProfileTopSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
-                .offset(y = BannerHeight - CardOverlap - ProfileAvatarHalfSize),
+                .offset(y = bannerHeight - CardOverlap - ProfileAvatarHalfSize),
             verticalAlignment = Alignment.Bottom
         ) {
             // Layout slot stays AvatarSize tall (so the name/content below isn't pushed),

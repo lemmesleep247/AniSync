@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import com.anisync.android.R
+import com.anisync.android.domain.LibraryPriority
 import com.anisync.android.domain.LibraryStatus
 import com.anisync.android.type.MediaFormat
 import com.anisync.android.type.MediaStatus
@@ -100,6 +101,24 @@ fun LibraryStatus.toListIconRes(): Int = when (this) {
     LibraryStatus.DROPPED -> R.drawable.ic_list_dropped
     LibraryStatus.UNKNOWN -> R.drawable.ic_list_custom
 }
+
+@Composable
+fun LibraryPriority.toLabel(): String = when (this) {
+    LibraryPriority.LOW -> stringResource(R.string.priority_low)
+    LibraryPriority.MEDIUM -> stringResource(R.string.priority_medium)
+    LibraryPriority.HIGH -> stringResource(R.string.priority_high)
+}
+
+/** Chevrons, from the design file: one down for Low, one up for Medium, two up for High. */
+@DrawableRes
+fun LibraryPriority.toIconRes(): Int = when (this) {
+    LibraryPriority.LOW -> R.drawable.ic_priority_low
+    LibraryPriority.MEDIUM -> R.drawable.ic_priority_medium
+    LibraryPriority.HIGH -> R.drawable.ic_priority_high
+}
+
+@Composable
+fun LibraryPriority.toIcon(): ImageVector = ImageVector.vectorResource(toIconRes())
 
 @Composable
 fun MediaStatus.toLabel(): String {

@@ -58,6 +58,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.anisync.android.R
+import com.anisync.android.presentation.components.bannerScrimBrush
+import com.anisync.android.presentation.components.bannerScrimHeight
 import com.anisync.android.domain.UserProfile
 import com.anisync.android.presentation.profile.util.formatProfileRelativeTime
 import com.anisync.android.ui.theme.emphasis
@@ -135,6 +137,15 @@ fun ProfileBannerSurface(
                     .background(scrimBrush)
             )
         }
+
+        // The banner runs under the status bar, and its own gradient has faded too far by the time
+        // it reaches the clock to carry the system icons.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(bannerScrimHeight())
+                .background(bannerScrimBrush())
+        )
 
         FilledTonalIconButton(
             onClick = onTopActionClick,

@@ -17,7 +17,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.requiredWidthIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -214,7 +217,10 @@ fun <T : Any> TwoPaneListDetailScaffold(
             .then(
                 if (twoPane) {
                     Modifier
+                        // Gutter fills the status-bar band; the padding then consumes that inset so
+                        // a screen in a pane doesn't reserve it a second time.
                         .background(TwoPaneDefaults.gutterColor)
+                        .windowInsetsPadding(WindowInsets.statusBars)
                         .padding(gutterPadding)
                 } else {
                     Modifier

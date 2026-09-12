@@ -1,8 +1,9 @@
-mutation UpdateMediaListEntries($ids: [Int], $status: MediaListStatus, $score: Float, $private: Boolean) {
-  UpdateMediaListEntries(ids: $ids, status: $status, score: $score, private: $private) {
+mutation UpdateMediaListEntries($ids: [Int], $status: MediaListStatus, $score: Float, $priority: Int, $private: Boolean) {
+  UpdateMediaListEntries(ids: $ids, status: $status, score: $score, priority: $priority, private: $private) {
     id
     status
     score
+    priority
     private
   }
 }

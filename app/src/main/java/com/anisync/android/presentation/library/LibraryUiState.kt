@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import com.anisync.android.data.TitleLanguage
 import com.anisync.android.domain.LibraryEntry
+import com.anisync.android.domain.LibraryPriority
 import com.anisync.android.domain.LibraryStatus
 import com.anisync.android.domain.ScoreFormat
 import com.anisync.android.presentation.util.LIBRARY_ALL_TAB_ID
@@ -126,7 +127,8 @@ enum class LibrarySort {
     LAST_UPDATED,
     LAST_ADDED,
     START_DATE,
-    RELEASE_DATE
+    RELEASE_DATE,
+    PRIORITY
 }
 
 sealed interface LibraryAction {
@@ -162,6 +164,7 @@ sealed interface LibraryAction {
     /** One `UpdateMediaListEntries` call, whatever the selection size. */
     data class BulkSetStatus(val status: LibraryStatus) : LibraryAction
     data class BulkSetScore(val score: Double) : LibraryAction
+    data class BulkSetPriority(val priority: LibraryPriority) : LibraryAction
     data class BulkSetPrivate(val isPrivate: Boolean) : LibraryAction
 
     /** One request per entry. Reports progress and can be cancelled. */

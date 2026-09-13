@@ -2095,6 +2095,7 @@
     <string name="library_set_priority">Set priority</string>
     <string name="library_priority_count_to">Set %1$d to %2$s</string>
     <string name="sort_priority">Priority</string>
+    <string name="a11y_priority">%1$s priority</string>
     <!-- Library empty states -->
     <string name="library_empty_all_title">Your library is empty</string>
     <string name="library_empty_all_desc">Anything you track on AniList turns up here.</string>

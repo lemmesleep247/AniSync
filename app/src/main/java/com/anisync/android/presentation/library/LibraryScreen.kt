@@ -817,6 +817,8 @@ private fun LibraryTabContent(
     }
     val selectionMode = uiState.isSelectionMode
     val selectable = tab.supportsSelection
+    // Redundant under the Priority sort: the group headers already name the level.
+    val showPriority = uiState.sortOption != LibrarySort.PRIORITY
 
     LazyVerticalGrid(
         columns = if (isGrid) {
@@ -860,6 +862,7 @@ private fun LibraryTabContent(
                         showScore = uiState.showScoreOnCards,
                         scoreFormat = uiState.userScoreFormat,
                         showListIndicator = tab is LibraryTab.All || tab is LibraryTab.Custom,
+                        showPriority = showPriority,
                         onClick = { onEntryClick(entry) },
                         onIncrement = if (hasQuickProgress) {
                             { onIncrement(entry.mediaId) }
@@ -883,6 +886,7 @@ private fun LibraryTabContent(
                         entry = entry,
                         mediaType = mediaType,
                         titleLanguage = titleLanguage,
+                        showPriority = showPriority,
                         onClick = { onEntryClick(entry) },
                         onIncrement = if (hasQuickProgress) {
                             { onIncrement(entry.mediaId) }

@@ -57,7 +57,10 @@ import coil.request.ImageRequest
 import com.anisync.android.R
 import com.anisync.android.data.TitleLanguage
 import com.anisync.android.domain.LibraryEntry
+import com.anisync.android.domain.LibraryPriority
 import com.anisync.android.domain.url
+import com.anisync.android.presentation.components.CoverBadgeRibbon
+import com.anisync.android.presentation.components.coverBadges
 import com.anisync.android.presentation.util.AppMotion
 import com.anisync.android.presentation.util.TransitionKeys
 import com.anisync.android.presentation.util.bouncyClickable
@@ -97,6 +100,8 @@ fun LibraryQueueRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     titleLanguage: TitleLanguage = TitleLanguage.ROMAJI,
+    /** Off wherever the view already states the priority, which is the Priority sort's headers. */
+    showPriority: Boolean = false,
     onIncrement: (() -> Unit)? = null,
     onEdit: (() -> Unit)? = null,
     onLongPress: (() -> Unit)? = null,
@@ -183,6 +188,7 @@ fun LibraryQueueRow(
                 entry = entry,
                 title = title,
                 dimmed = selected,
+                priority = entry.priorityLevel.takeIf { showPriority },
                 sharedTransitionScope = sharedTransitionScope,
                 animatedVisibilityScope = animatedVisibilityScope
             )
@@ -258,6 +264,7 @@ private fun QueueCover(
     entry: LibraryEntry,
     title: String,
     dimmed: Boolean,
+    priority: LibraryPriority?,
     sharedTransitionScope: SharedTransitionScope?,
     animatedVisibilityScope: AnimatedVisibilityScope?
 ) {
@@ -305,21 +312,15 @@ private fun QueueCover(
                 .graphicsLayer { alpha = if (dimmed) 0.72f else 1f }
         )
 
-        // Spot an annotated entry while scanning, without opening anything (#75).
-        if (!entry.notes.isNullOrBlank()) {
-            Surface(
-                shape = RoundedCornerShape(bottomEnd = 8.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.align(Alignment.TopStart)
-            ) {
-                Icon(
-                    imageVector = ImageVector.vectorResource(R.drawable.ic_note_stack_24px),
-                    contentDescription = stringResource(R.string.a11y_has_notes),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.padding(4.dp).size(14.dp)
-                )
-            }
-        }
+        // Spot an annotated or prioritised entry while scanning, without opening anything
+        // (#75, #131). Both marks share this corner, so they stack rather than fight for it.
+        CoverBadgeRibbon(
+            badges = coverBadges(
+                hasNotes = !entry.notes.isNullOrBlank(),
+                priority = priority
+            ),
+            modifier = Modifier.align(Alignment.TopStart)
+        )
     }
 }
 

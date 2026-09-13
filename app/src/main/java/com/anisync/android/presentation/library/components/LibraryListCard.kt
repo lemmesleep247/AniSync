@@ -64,6 +64,8 @@ import com.anisync.android.domain.LibraryStatus
 import com.anisync.android.domain.ScoreFormat
 import com.anisync.android.presentation.components.AiringCountdownText
 import com.anisync.android.presentation.components.CompletedCardConfig
+import com.anisync.android.presentation.components.CoverBadgeRibbon
+import com.anisync.android.presentation.components.coverBadges
 import com.anisync.android.presentation.components.ScoreChip
 import com.anisync.android.presentation.components.LibraryCardConfig
 import com.anisync.android.presentation.components.WatchingCardConfig
@@ -209,22 +211,10 @@ fun LibraryListCard(
                 // "Has notes" indicator — lets you spot annotated entries while scanning the list
                 // without opening anything (#75). Read the note itself on the detail page or in the
                 // Notes journal.
-                if (!entry.notes.isNullOrBlank()) {
-                    Surface(
-                        shape = RoundedCornerShape(bottomEnd = 8.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.align(Alignment.TopStart)
-                    ) {
-                        Icon(
-                            imageVector = ImageVector.vectorResource(R.drawable.ic_note_stack_24px),
-                            contentDescription = stringResource(R.string.a11y_has_notes),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier
-                                .padding(4.dp)
-                                .size(14.dp)
-                        )
-                    }
-                }
+                CoverBadgeRibbon(
+                    badges = coverBadges(hasNotes = !entry.notes.isNullOrBlank()),
+                    modifier = Modifier.align(Alignment.TopStart)
+                )
             }
 
             // Right Side: Content

@@ -55,9 +55,11 @@ import com.anisync.android.domain.LibraryStatus
 import com.anisync.android.domain.ScoreFormat
 import com.anisync.android.domain.formatScore
 import com.anisync.android.domain.url
+import com.anisync.android.presentation.components.CoverBadgeRibbon
 import com.anisync.android.presentation.components.ListIndicator
 import com.anisync.android.presentation.components.ListIndicatorCorner
 import com.anisync.android.presentation.components.ListIndicatorStyle
+import com.anisync.android.presentation.components.coverBadges
 import com.anisync.android.presentation.util.AppMotion
 import com.anisync.android.presentation.util.TransitionKeys
 import com.anisync.android.presentation.util.bouncyClickable
@@ -94,6 +96,8 @@ fun LibraryPosterCard(
     showScore: Boolean = false,
     scoreFormat: ScoreFormat = ScoreFormat.POINT_10_DECIMAL,
     showListIndicator: Boolean = false,
+    /** Off wherever the view already states the priority, which is the Priority sort's headers. */
+    showPriority: Boolean = false,
     onIncrement: (() -> Unit)? = null,
     onEdit: (() -> Unit)? = null,
     onLongPress: (() -> Unit)? = null,
@@ -179,6 +183,7 @@ fun LibraryPosterCard(
                 showScore = showScore,
                 scoreFormat = scoreFormat,
                 showListIndicator = showListIndicator,
+                showPriority = showPriority,
                 onIncrement = onIncrement,
                 onEdit = onEdit,
                 selectionMode = selectionMode,
@@ -223,6 +228,7 @@ private fun PosterArt(
     showScore: Boolean,
     scoreFormat: ScoreFormat,
     showListIndicator: Boolean,
+    showPriority: Boolean,
     onIncrement: (() -> Unit)?,
     onEdit: (() -> Unit)?,
     selectionMode: Boolean,
@@ -280,6 +286,18 @@ private fun PosterArt(
                 type = entry.type,
                 style = ListIndicatorStyle.Corner,
                 corner = ListIndicatorCorner.TopStart,
+                modifier = Modifier.align(Alignment.TopStart)
+            )
+        } else {
+            // Same corner as the tab, so only one of the two ever draws. The list tabs that show
+            // the corner tab are answering "which list is this on", not "how soon".
+            CoverBadgeRibbon(
+                badges = coverBadges(
+                    hasNotes = !entry.notes.isNullOrBlank(),
+                    priority = entry.priorityLevel.takeIf { showPriority }
+                ),
+                iconSize = 16.dp,
+                cellPadding = 5.dp,
                 modifier = Modifier.align(Alignment.TopStart)
             )
         }

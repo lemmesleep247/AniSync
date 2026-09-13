@@ -1,5 +1,6 @@
 package com.anisync.android.presentation.components
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.view.View
 import android.view.WindowManager
@@ -233,9 +234,13 @@ private fun PaneAnchoredSheet(
                 ?: return@SideEffect
             val adjustResize = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
             if (params.softInputMode and WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST != adjustResize) {
-                params.softInputMode = (
+                // SOFT_INPUT_MASK_ADJUST is a mask, not one of the modes lint expects.
+                // Clearing with it and OR-ing the mode back in swaps only the adjust bits.
+                @SuppressLint("WrongConstant")
+                val mode = (
                     params.softInputMode and WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST.inv()
                     ) or adjustResize
+                params.softInputMode = mode
                 (popupWindowView.context.getSystemService(Context.WINDOW_SERVICE) as WindowManager)
                     .updateViewLayout(popupWindowView, params)
             }

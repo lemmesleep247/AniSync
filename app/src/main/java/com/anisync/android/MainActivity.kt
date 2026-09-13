@@ -324,8 +324,9 @@ class MainActivity : AppCompatActivity() {
                           Box(modifier = Modifier.fillMaxSize()) {
                             // Cold Flow — seed from the account store so a logged-in cold start
                             // doesn't flash LoginScreen for a frame.
+                            val loggedInSeed = remember { accountManager.activeAccount.value != null }
                             val isLoggedIn by authRepository.isLoggedIn.collectAsStateWithLifecycle(
-                                initialValue = accountManager.activeAccount.value != null
+                                initialValue = loggedInSeed
                             )
 
                             // Session expired dialog

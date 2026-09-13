@@ -54,6 +54,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -202,6 +203,7 @@ private fun ShareCustomizerContent(
     card: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     val controller = rememberCaptureController()
@@ -276,7 +278,7 @@ private fun ShareCustomizerContent(
                         if (ok) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         Toast.makeText(
                             context,
-                            context.getString(
+                            resources.getString(
                                 if (ok) R.string.share_saved_to_gallery else R.string.share_save_failed
                             ),
                             Toast.LENGTH_SHORT

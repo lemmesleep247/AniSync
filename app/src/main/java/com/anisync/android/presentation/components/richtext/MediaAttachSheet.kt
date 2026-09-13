@@ -7,7 +7,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -248,7 +248,7 @@ private fun PickedView(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (state.kind != MediaKind.Video) {
-            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            Box(modifier = Modifier.fillMaxWidth()) {
                 val fraction = sizeToWidthFraction(state.size)
                 Surface(
                     modifier = Modifier

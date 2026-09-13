@@ -216,6 +216,15 @@ android {
         }
     }
 
+    lint {
+        // Weblate owns the translated locales and they land incomplete by design, so a string
+        // missing from one of them is never a defect in this repo.
+        disable += "MissingTranslation"
+        // Every layout here is a RemoteViews widget, and RemoteViews inflates a plain ImageView.
+        // app:tint would resolve to nothing, so android:tint is the only one that paints.
+        disable += "UseAppTint"
+    }
+
     // Ships the exported Room schemas into the androidTest APK. Without them MigrationTestHelper
     // fails on FileNotFoundException before it ever reaches a migration, which is why the migration
     // tests have never actually guarded anything. They matter here more than in most projects,

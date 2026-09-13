@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
@@ -71,7 +72,6 @@ import com.anisync.android.presentation.util.LocalLibraryStatuses
 import com.anisync.android.presentation.util.TransitionKeys
 import com.anisync.android.presentation.util.rememberCopyToClipboard
 import java.text.NumberFormat
-import java.util.Locale
 
 /**
  * Full-width hero image for character/staff details.
@@ -254,7 +254,9 @@ fun NameCard(
                         )
                         Spacer(modifier = Modifier.width(2.dp))
                         Text(
-                            text = NumberFormat.getNumberInstance(Locale.getDefault()).format(favs),
+                            text = NumberFormat
+                                .getNumberInstance(LocalConfiguration.current.locales[0])
+                                .format(favs),
                             style = MaterialTheme.typography.labelLarge.emphasis(),
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )

@@ -69,6 +69,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -519,7 +520,7 @@ private fun MonthHeader(
     onNext: () -> Unit,
     onThisMonth: () -> Unit
 ) {
-    val locale = Locale.getDefault()
+    val locale = LocalConfiguration.current.locales[0]
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -568,7 +569,7 @@ private fun MonthHeader(
 
 @Composable
 private fun WeekdayLabelsRow(modifier: Modifier = Modifier) {
-    val locale = Locale.getDefault()
+    val locale = LocalConfiguration.current.locales[0]
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -619,7 +620,7 @@ private fun MonthDayCell(
         else -> MaterialTheme.colorScheme.primary
     }
 
-    val locale = Locale.getDefault()
+    val locale = LocalConfiguration.current.locales[0]
     val dateLabel = remember(day.date) {
         day.date.format(DateTimeFormatter.ofPattern("EEEE, MMMM d", locale))
     }
@@ -729,7 +730,7 @@ private fun DayDetailPane(
 
 @Composable
 private fun DayDetailHeader(date: LocalDate, count: Int, isToday: Boolean) {
-    val locale = Locale.getDefault()
+    val locale = LocalConfiguration.current.locales[0]
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -897,7 +898,7 @@ private fun DayCell(
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
-    val locale = Locale.getDefault()
+    val locale = LocalConfiguration.current.locales[0]
     // Merge the three texts into one TalkBack node; selection state comes from selectable().
     val cellDescription = remember(day.date) {
         val weekdayFull = day.date.dayOfWeek.getDisplayName(TextStyle.FULL, locale)

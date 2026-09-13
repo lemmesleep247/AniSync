@@ -70,6 +70,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -89,7 +90,6 @@ import com.anisync.android.presentation.util.TwoPaneDefaults
 import com.anisync.android.presentation.util.TwoPaneRow
 import com.anisync.android.ui.theme.emphasis
 import java.text.NumberFormat
-import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Job
@@ -730,7 +730,8 @@ private fun PersonIdentityPane(
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            text = NumberFormat.getNumberInstance(Locale.getDefault())
+                            text = NumberFormat
+                                .getNumberInstance(LocalConfiguration.current.locales[0])
                                 .format(favourites),
                             style = MaterialTheme.typography.titleSmall.emphasis(),
                             color = MaterialTheme.colorScheme.onSurface

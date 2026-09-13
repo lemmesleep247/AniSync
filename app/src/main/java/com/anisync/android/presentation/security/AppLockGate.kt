@@ -56,6 +56,8 @@ fun AppLockGate(
 
     val context = LocalContext.current
     val activity = remember(context) { context.findFragmentActivity() }
+    val promptTitle = stringResource(R.string.app_lock_title)
+    val promptSubtitle = stringResource(R.string.app_lock_subtitle)
 
     // Swallow Back while locked so it can't drive the hidden UI underneath; send the app to the
     // background instead, the way a real lock screen behaves.
@@ -73,8 +75,8 @@ fun AppLockGate(
         // when nothing is showing (auto-launch on appear, or a tap on the Unlock button).
         appLockManager.onUnlockStarted()
         host.authenticateForAppLock(
-            title = context.getString(R.string.app_lock_title),
-            subtitle = context.getString(R.string.app_lock_subtitle),
+            title = promptTitle,
+            subtitle = promptSubtitle,
             onSuccess = { appLockManager.unlock() },
             onError = { appLockManager.onUnlockDismissed() },
         )

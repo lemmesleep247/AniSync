@@ -73,6 +73,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -353,6 +354,7 @@ private fun AboutHero(
 
         // Hidden gesture: tapping the version label 7x unlocks Developer Tools in any build.
         val context = LocalContext.current
+        val resources = LocalResources.current
         val appSettings = LocalAppSettings.current
         val devToolsUnlocked by appSettings.devToolsUnlocked
             .collectAsStateWithLifecycle(initialValue = false)
@@ -385,7 +387,7 @@ private fun AboutHero(
                     }
                     remaining <= 3 -> Toast.makeText(
                         context,
-                        context.getString(R.string.dev_tools_taps_remaining, remaining),
+                        resources.getString(R.string.dev_tools_taps_remaining, remaining),
                         Toast.LENGTH_SHORT,
                     ).show()
                 }

@@ -1,0 +1,118 @@
+name: Mirror to Codeberg
+
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "**"
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
+
+concurrency:
+  group: mirror-to-codeberg
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  mirror:
+    if: github.repository == 'lemmesleep247/AniSync'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Configure credentials via .netrc
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CB_USER: ${{ secrets.CODEBERG_USER }}
+          CB_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
+        run: |
+          set -euo pipefail
+          cat > "${HOME}/.netrc" <<EOF
+          machine github.com
+          login x-access-token
+          password ${GH_TOKEN}
+
+          machine codeberg.org
+          login ${CB_USER}
+          password ${CB_TOKEN}
+          EOF
+          chmod 600 "${HOME}/.netrc"
+
+      - name: Clone full mirror from GitHub
+        run: |
+          set -euo pipefail
+          git clone --mirror "https://github.com/${GITHUB_REPOSITORY}.git" repo-mirror
+
+      - name: Sanity-check the mirror before pushing
+        run: |
+          set -euo pipefail
+          cd repo-mirror
+          branch_count=$(git branch -a | wc -l)
+          tag_count=$(git tag | wc -l)
+          echo "Fetched ${branch_count} branches and ${tag_count} tags."
+          if [ "${branch_count}" -eq 0 ]; then
+            echo "::error::Mirror clone produced 0 branches — aborting to avoid wiping Codeberg."
+            exit 1
+          fi
+
+      - name: Configure git for large/slow pushes
+        run: |
+          set -euo pipefail
+          cd repo-mirror
+          git config http.postBuffer 1048576000
+          git config http.version HTTP/1.1
+          git config http.lowSpeedLimit 0
+          git config http.lowSpeedTime 999999
+          git config core.compression 9
+
+      - name: Set Codeberg remote
+        env:
+          CB_USER: ${{ secrets.CODEBERG_USER }}
+          CB_REPO: ${{ secrets.CODEBERG_REPO }}
+        run: |
+          set -euo pipefail
+          cd repo-mirror
+          git remote set-url origin "https://codeberg.org/${CB_USER}/${CB_REPO}.git"
+          git config remote.origin.mirror false
+
+      - name: Push branches to Codeberg (with retry + prune)
+        run: |
+          set -euo pipefail
+          cd repo-mirror
+          attempt=1
+          max_attempts=6
+          until git push --force --prune origin 'refs/heads/*:refs/heads/*'; do
+            if [ "${attempt}" -ge "${max_attempts}" ]; then
+              echo "::error::Branch push to Codeberg failed after ${max_attempts} attempts."
+              exit 1
+            fi
+            wait=$((attempt * 20))
+            echo "Branch push attempt ${attempt} failed, retrying in ${wait}s..."
+            attempt=$((attempt + 1))
+            sleep "${wait}"
+          done
+
+      - name: Push tags to Codeberg (with retry + prune)
+        run: |
+          set -euo pipefail
+          cd repo-mirror
+          attempt=1
+          max_attempts=6
+          until git push --force --prune origin 'refs/tags/*:refs/tags/*'; do
+            if [ "${attempt}" -ge "${max_attempts}" ]; then
+              echo "::error::Tag push to Codeberg failed after ${max_attempts} attempts."
+              exit 1
+            fi
+            wait=$((attempt * 20))
+            echo "Tag push attempt ${attempt} failed, retrying in ${wait}s..."
+            attempt=$((attempt + 1))
+            sleep "${wait}"
+          done
+
+      - name: Clean up credentials
+        if: always()
+        run: rm -f "${HOME}/.netrc"

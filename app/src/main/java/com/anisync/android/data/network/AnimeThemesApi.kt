@@ -3,18 +3,26 @@ package com.anisync.android.data.network
 import com.anisync.android.BuildConfig
 import com.anisync.android.domain.MediaTheme
 import com.anisync.android.domain.MediaThemes
+import com.anisync.android.domain.ThemeAudio
+import com.anisync.android.domain.ThemePerformer
 import com.anisync.android.domain.ThemeType
 import com.anisync.android.domain.ThemeVersion
 import com.anisync.android.domain.ThemeVideo
+import com.anisync.android.domain.VideoOverlap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import okhttp3.HttpUrl
-import okhttp3.HttpUrl.Companion.toHttpUrl
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -23,10 +31,8 @@ import javax.inject.Singleton
 /**
  * Read-only client for the AnimeThemes API, the source of a title's openings and endings.
  *
- * Two requests, because the API refuses a nested include deep enough to do it in one:
- * the AniList id resolves to an AnimeThemes slug through `/resource`, then `/anime/{slug}`
- * returns the themes. Both are anonymous, so there is no key to ship and nothing to
- * refresh. Sparse fieldsets keep the second response to what the UI actually draws.
+ * One GraphQL request resolves the AniList id and returns the themes with it. It is
+ * anonymous, so there is no key to ship and nothing to refresh.
  *
  * Failures surface as [AnimeThemesException] so the repository can tell a rate limit
  * apart from a title that simply is not listed.
@@ -39,6 +45,7 @@ class AnimeThemesApi @Inject constructor() {
             .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
+            .encryptedClientHello()
             .build()
     }
 
@@ -49,52 +56,30 @@ class AnimeThemesApi @Inject constructor() {
      * the title is not in their database, which is a real answer rather than a failure.
      */
     suspend fun getThemes(anilistId: Int): MediaThemes = withContext(Dispatchers.IO) {
-        val slug = resolveSlug(anilistId) ?: return@withContext MediaThemes()
-        MediaThemes(animeSlug = slug, themes = fetchThemes(slug))
+        val payload = buildJsonObject {
+            put("query", THEMES_QUERY)
+            putJsonObject("variables") {
+                putJsonArray("id") { add(anilistId) }
+            }
+        }
+        decodeThemes(post(payload.toString()))
     }
 
-    private fun resolveSlug(anilistId: Int): String? {
-        val url = BASE_URL.newBuilder()
-            .addPathSegment("resource")
-            .addQueryParameter("filter[site]", "AniList")
-            .addQueryParameter("filter[external_id]", anilistId.toString())
-            .addQueryParameter("include", "anime")
-            .addQueryParameter("fields[resource]", "id")
-            .addQueryParameter("fields[anime]", "slug")
-            .build()
-
-        val body = get(url)
-        val response = json.decodeFromString<ResourceListDto>(body)
-        return response.resources
-            .firstNotNullOfOrNull { resource -> resource.anime.firstNotNullOfOrNull { it.slug } }
+    internal fun decodeThemes(body: String): MediaThemes {
+        val response = json.decodeFromString<ThemesResponseDto>(body)
+        if (response.errors.isNotEmpty()) {
+            throw AnimeThemesException.Query(response.errors.mapNotNull { it.message })
+        }
+        val anime = response.data?.anime?.firstOrNull() ?: return MediaThemes()
+        return MediaThemes(animeSlug = anime.slug, themes = anime.themes.mapNotNull { it.toDomain() })
     }
 
-    private fun fetchThemes(slug: String): List<MediaTheme> {
-        val url = BASE_URL.newBuilder()
-            .addPathSegment("anime")
-            .addPathSegment(slug)
-            .addQueryParameter(
-                "include",
-                "animethemes.song.artists,animethemes.animethemeentries.videos"
-            )
-            .addQueryParameter("fields[anime]", "id,slug")
-            .addQueryParameter("fields[animetheme]", "id,type,sequence,slug")
-            .addQueryParameter("fields[song]", "id,title")
-            .addQueryParameter("fields[artist]", "name")
-            .addQueryParameter("fields[animethemeentry]", "id,version,episodes,notes,spoiler,nsfw")
-            .addQueryParameter("fields[video]", "id,link,resolution,nc,subbed,lyrics,source")
-            .build()
-
-        val body = get(url)
-        val response = json.decodeFromString<AnimeEnvelopeDto>(body)
-        return response.anime?.themes.orEmpty().mapNotNull { it.toDomain() }
-    }
-
-    private fun get(url: HttpUrl): String {
+    private fun post(body: String): String {
         val request = Request.Builder()
-            .url(url)
+            .url(ENDPOINT)
             .header("Accept", "application/json")
             .header("User-Agent", USER_AGENT)
+            .post(body.toRequestBody(JSON_MEDIA_TYPE))
             .build()
 
         val response = try {
@@ -116,12 +101,39 @@ class AnimeThemesApi @Inject constructor() {
     }
 
     companion object {
-        private val BASE_URL = "https://api.animethemes.moe".toHttpUrl()
+        private const val ENDPOINT = "https://graphql.animethemes.moe/"
+        private val JSON_MEDIA_TYPE = "application/json".toMediaType()
         private const val CONNECT_TIMEOUT_SECONDS = 15L
         private const val READ_TIMEOUT_SECONDS = 20L
         private const val HTTP_TOO_MANY_REQUESTS = 429
         private val USER_AGENT =
             "AniSync/${BuildConfig.VERSION_NAME} (+https://github.com/Marco-9456/AniSync)"
+
+        private val THEMES_QUERY = """
+            query(${'$'}id: [Int!]) {
+              findAnimeByExternalSite(site: ANILIST, id: ${'$'}id) {
+                slug
+                animethemes {
+                  id type sequence slug
+                  group { name }
+                  song {
+                    title { romaji }
+                    performances {
+                      relevance as alias memberAs memberAlias
+                      artist { name { main } }
+                      member { name { main } }
+                    }
+                  }
+                  animethemeentries {
+                    id version episodes notes spoiler nsfw
+                    videos {
+                      nodes { id link resolution nc subbed lyrics source overlap audio { link size } }
+                    }
+                  }
+                }
+              }
+            }
+        """.trimIndent()
     }
 }
 
@@ -135,24 +147,35 @@ sealed class AnimeThemesException(message: String, cause: Throwable? = null) :
         AnimeThemesException("AnimeThemes rate limit reached")
 
     class Http(val statusCode: Int) : AnimeThemesException("AnimeThemes returned $statusCode")
+
+    /**
+     * GraphQL reports validation, depth and complexity failures with HTTP 200, so the body has
+     * to be checked. Without this a rejected query would read as a title with no themes and be
+     * cached for a week.
+     */
+    class Query(val messages: List<String>) :
+        AnimeThemesException("AnimeThemes rejected the query: ${messages.joinToString()}")
 }
 
 // --- Wire format ---
 
 @Serializable
-private data class ResourceListDto(val resources: List<ResourceDto> = emptyList())
+private data class ThemesResponseDto(
+    val data: ThemesDataDto? = null,
+    val errors: List<GraphQLErrorDto> = emptyList()
+)
 
 @Serializable
-private data class ResourceDto(val anime: List<AnimeRefDto> = emptyList())
+private data class GraphQLErrorDto(val message: String? = null)
 
 @Serializable
-private data class AnimeRefDto(val slug: String? = null)
-
-@Serializable
-private data class AnimeEnvelopeDto(val anime: AnimeDto? = null)
+private data class ThemesDataDto(
+    @SerialName("findAnimeByExternalSite") val anime: List<AnimeDto>? = null
+)
 
 @Serializable
 private data class AnimeDto(
+    val slug: String? = null,
     @SerialName("animethemes") val themes: List<ThemeDto> = emptyList()
 )
 
@@ -162,18 +185,43 @@ private data class ThemeDto(
     val type: String? = null,
     val sequence: Int? = null,
     val slug: String? = null,
+    val group: ThemeGroupDto? = null,
     val song: SongDto? = null,
     @SerialName("animethemeentries") val entries: List<EntryDto> = emptyList()
 )
 
 @Serializable
+private data class ThemeGroupDto(val name: String? = null)
+
+@Serializable
 private data class SongDto(
-    val title: String? = null,
-    val artists: List<ArtistDto> = emptyList()
+    val title: SongTitleDto? = null,
+    val performances: List<PerformanceDto> = emptyList()
 )
 
 @Serializable
-private data class ArtistDto(val name: String? = null)
+private data class SongTitleDto(val romaji: String? = null)
+
+/**
+ * A band is credited once per member, so the same artist can appear several times. [alias] is the
+ * name the artist is credited under and [as] the character sung as, with member twins of both.
+ */
+@Serializable
+private data class PerformanceDto(
+    val relevance: Int? = null,
+    val `as`: String? = null,
+    val alias: String? = null,
+    val memberAs: String? = null,
+    val memberAlias: String? = null,
+    val artist: ArtistDto? = null,
+    val member: ArtistDto? = null
+)
+
+@Serializable
+private data class ArtistDto(val name: ArtistNameDto? = null)
+
+@Serializable
+private data class ArtistNameDto(val main: String? = null)
 
 @Serializable
 private data class EntryDto(
@@ -183,8 +231,11 @@ private data class EntryDto(
     val notes: String? = null,
     val spoiler: Boolean = false,
     val nsfw: Boolean = false,
-    val videos: List<VideoDto> = emptyList()
+    val videos: VideoConnectionDto = VideoConnectionDto()
 )
+
+@Serializable
+private data class VideoConnectionDto(val nodes: List<VideoDto> = emptyList())
 
 @Serializable
 private data class VideoDto(
@@ -194,38 +245,81 @@ private data class VideoDto(
     val nc: Boolean = false,
     val subbed: Boolean = false,
     val lyrics: Boolean = false,
-    val source: String? = null
+    val source: String? = null,
+    val overlap: String? = null,
+    val audio: AudioDto? = null
 )
+
+@Serializable
+private data class AudioDto(val link: String? = null, val size: Long? = null)
 
 private fun ThemeDto.toDomain(): MediaTheme? {
     val themeType = when (type?.uppercase()) {
         "OP" -> ThemeType.OP
         "ED" -> ThemeType.ED
+        "IN" -> ThemeType.IN
         else -> return null
     }
-    val versions = entries.map { it.toDomain() }.filter { it.videos.isNotEmpty() }
+    val all = entries.map { it.toDomain() }
+    val playable = all.filter { it.videos.isNotEmpty() }
+    // Insert songs are catalogued as songs and almost never carry a video, so they are kept for
+    // their credits and episodes. An opening or ending with nothing to play is left out.
+    val versions = when {
+        playable.isNotEmpty() -> playable
+        themeType == ThemeType.IN -> all
+        else -> emptyList()
+    }
     if (versions.isEmpty()) return null
+
+    val performances = song?.performances.orEmpty().sortedBy { it.relevance ?: Int.MAX_VALUE }
 
     return MediaTheme(
         id = id,
         type = themeType,
         sequence = sequence,
-        slug = slug ?: (themeType.name + (sequence ?: 1)),
-        songTitle = song?.title?.takeIf { it.isNotBlank() },
-        artists = song?.artists.orEmpty().mapNotNull { it.name?.takeIf(String::isNotBlank) },
-        versions = versions
+        slug = slug ?: (themeType.name + (sequence ?: "")),
+        songTitle = song?.title?.romaji?.takeIf { it.isNotBlank() },
+        artists = performances.mapNotNull { it.creditedArtist() }.distinct(),
+        versions = versions,
+        groupName = group?.name?.takeIf { it.isNotBlank() },
+        performers = performances.mapNotNull { it.toPerformer() }.distinct()
     )
 }
 
-private fun EntryDto.toDomain(): ThemeVersion = ThemeVersion(
-    id = id,
-    version = version ?: 1,
-    rawEpisodes = episodes,
-    notes = notes?.takeIf { it.isNotBlank() },
-    spoiler = spoiler,
-    nsfw = nsfw,
-    videos = videos.mapNotNull { it.toDomain() }
-)
+private fun PerformanceDto.creditedArtist(): String? =
+    alias?.takeIf { it.isNotBlank() } ?: artist?.name?.main?.takeIf { it.isNotBlank() }
+
+private fun PerformanceDto.toPerformer(): ThemePerformer? {
+    val credited = creditedArtist() ?: return null
+    val memberName = memberAlias?.takeIf { it.isNotBlank() }
+        ?: member?.name?.main?.takeIf { it.isNotBlank() }
+    return if (memberName != null) {
+        ThemePerformer(
+            name = memberName,
+            character = memberAs?.takeIf { it.isNotBlank() },
+            band = credited
+        )
+    } else {
+        ThemePerformer(name = credited, character = `as`?.takeIf { it.isNotBlank() })
+    }
+}
+
+private fun EntryDto.toDomain(): ThemeVersion {
+    // Every video of an entry points at the same audio file, so the first one found stands for all.
+    val audio = videos.nodes.firstNotNullOfOrNull { video ->
+        video.audio?.link?.takeIf { it.isNotBlank() }?.let { ThemeAudio(it, video.audio.size) }
+    }
+    return ThemeVersion(
+        id = id,
+        version = version ?: 1,
+        rawEpisodes = episodes,
+        notes = notes?.takeIf { it.isNotBlank() },
+        spoiler = spoiler,
+        nsfw = nsfw,
+        videos = videos.nodes.mapNotNull { it.toDomain() },
+        audio = audio
+    )
+}
 
 private fun VideoDto.toDomain(): ThemeVideo? {
     val href = link?.takeIf { it.isNotBlank() } ?: return null
@@ -236,6 +330,11 @@ private fun VideoDto.toDomain(): ThemeVideo? {
         creditless = nc,
         subbed = subbed,
         lyrics = lyrics,
-        source = source?.takeIf { it.isNotBlank() }
+        source = source?.takeIf { it.isNotBlank() },
+        overlap = when (overlap?.uppercase()) {
+            "TRANS" -> VideoOverlap.Transition
+            "OVER" -> VideoOverlap.Over
+            else -> VideoOverlap.None
+        }
     )
 }

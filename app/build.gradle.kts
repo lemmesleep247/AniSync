@@ -61,14 +61,12 @@ abstract class RenameApksTask : DefaultTask() {
 
 android {
     namespace = "com.anisync.android"
-    // Glance 1.3.x is built against API 37 and requires AGP 9.2.0+. targetSdk stays on 36 so the
-    // upgrade does not also opt the app into API 37 runtime behaviour changes.
     compileSdk = 37
 
     defaultConfig {
         applicationId = "com.anisync.android"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 21
         versionName = "3.2.1"
 
@@ -230,13 +228,12 @@ android {
     // tests have never actually guarded anything. They matter here more than in most projects,
     // because DatabaseModule still builds with fallbackToDestructiveMigration, so a missing
     // migration wipes user data instead of crashing.
-    sourceSets.getByName("androidTest").assets.srcDirs("$projectDir/schemas")
+    sourceSets.getByName("androidTest").assets.directories.add("$projectDir/schemas")
 }
 
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
-        freeCompilerArgs.add("-Xannotation-default-target=param-property")
     }
 }
 
@@ -279,13 +276,15 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.gif)
     implementation(libs.coil.svg)
+    implementation(libs.coil.network.okhttp)
     implementation(libs.materialkolor)
     implementation(libs.jsoup)
     implementation(libs.media3.exoplayer)
-    implementation(libs.media3.ui)
+    implementation(libs.media3.ui.compose)
     implementation(libs.media3.datasource.okhttp)
     implementation(libs.security.crypto)
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.work.analytics)
     implementation(libs.androidx.hilt.work)
     ksp(libs.androidx.hilt.compiler)
     implementation(libs.androidx.core.remoteviews)
@@ -293,6 +292,7 @@ dependencies {
     implementation(libs.reorderable)
     implementation(libs.okhttp)
     implementation(libs.androidx.biometric)
+    implementation(libs.androidx.biometric.compose)
     implementation(libs.capturable)
 
     testImplementation(libs.junit)
@@ -317,13 +317,12 @@ apollo {
         }
         generateKotlinModels.set(true)
         // Generates the type policies, max ages and the cache() builder extension the normalized
-        // cache reads. Apollo Kotlin v4 takes the argument inside the plugin block.
+        // cache reads.
         plugin(
             "com.apollographql.cache:normalized-cache-apollo-compiler-plugin:" +
                 libs.versions.apolloCache.get()
-        ) {
-            argument("com.apollographql.cache.packageName", packageName.get())
-        }
+        )
+        pluginArgument("com.apollographql.cache.packageName", packageName.get())
         mapScalar("Json", "kotlin.Any", "com.apollographql.apollo.api.AnyAdapter")
         mapScalar("CountryCode", "kotlin.String", "com.apollographql.apollo.api.StringAdapter")
         mapScalar("FuzzyDateInt", "kotlin.Int", "com.apollographql.apollo.api.IntAdapter")

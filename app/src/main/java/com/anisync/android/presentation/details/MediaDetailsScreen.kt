@@ -16,7 +16,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -112,8 +111,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.anisync.android.R
 import com.anisync.android.data.TitleLanguage
 import com.anisync.android.domain.ForumThread
@@ -157,12 +157,13 @@ import com.anisync.android.presentation.details.components.RelationItem
 import com.anisync.android.presentation.details.components.ReviewsListSheet
 import com.anisync.android.presentation.details.components.StaffItem
 import com.anisync.android.presentation.details.components.mediaStatsTabContent
+import com.anisync.android.presentation.library.components.ScoreOnCompleteSheet
 import com.anisync.android.presentation.util.AppMotion
 import com.anisync.android.presentation.util.LocalAppSettings
 import com.anisync.android.presentation.util.LocalPaneIsRoot
 import com.anisync.android.presentation.util.TransitionKeys
+import com.anisync.android.presentation.util.copyOnLongPress
 import com.anisync.android.presentation.util.formatAsTitle
-import com.anisync.android.presentation.util.rememberCopyToClipboard
 import com.anisync.android.presentation.util.rememberHapticFeedback
 import com.anisync.android.presentation.util.toIcon
 import com.anisync.android.presentation.util.toLabel
@@ -210,6 +211,7 @@ fun MediaDetailsScreen(
     val titleLanguage by viewModel.titleLanguage.collectAsStateWithLifecycle()
     val showEditSheet by viewModel.showEditSheet.collectAsStateWithLifecycle()
     val draftEntry by viewModel.draftEntry.collectAsStateWithLifecycle()
+    val scorePromptEntry by viewModel.scorePromptEntry.collectAsStateWithLifecycle()
     val userScoreFormat by viewModel.userScoreFormat.collectAsStateWithLifecycle()
     val animeCustomLists by viewModel.animeCustomLists.collectAsStateWithLifecycle()
     val animeAdvancedScoring by viewModel.animeAdvancedScoring.collectAsStateWithLifecycle()
@@ -393,7 +395,12 @@ fun MediaDetailsScreen(
                                             text = appBarTitle,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
-                                            style = MaterialTheme.typography.titleLarge
+                                            style = MaterialTheme.typography.titleLarge,
+                                            modifier = Modifier.copyOnLongPress(
+                                                appBarTitle,
+                                                stringResource(R.string.clip_label_title),
+                                                stringResource(R.string.copied_title)
+                                            )
                                         )
                                     }
                                 },
@@ -609,10 +616,7 @@ fun MediaDetailsScreen(
                                         )
                                     },
                                     onProgressChange = { progress ->
-                                        viewModel.saveMediaListEntry(
-                                            state.details.listStatus ?: LibraryStatus.CURRENT,
-                                            progress.coerceAtLeast(0)
-                                        )
+                                        viewModel.updateProgress(progress.coerceAtLeast(0))
                                     },
                                     onEditEntry = viewModel::openEditSheet,
                                     onRemoveEntry = viewModel::deleteMediaListEntry,
@@ -672,6 +676,21 @@ fun MediaDetailsScreen(
                         }
                     )
                 }
+            }
+
+            scorePromptEntry?.let { entry ->
+                ScoreOnCompleteSheet(
+                    entry = entry,
+                    titleLanguage = titleLanguage,
+                    scoreFormat = userScoreFormat,
+                    advancedScoringCategories = if (entry.type == com.anisync.android.type.MediaType.MANGA) {
+                        mangaAdvancedScoring
+                    } else {
+                        animeAdvancedScoring
+                    },
+                    onDismiss = viewModel::dismissCompletionScore,
+                    onSave = viewModel::saveCompletionScore
+                )
             }
 
             if (showShareImageSheet) {
@@ -1624,6 +1643,7 @@ fun DetailsPageContent(
             theme = theme,
             totalEpisodes = details.coverageEpisodeCount,
             animeSlug = themesState.animeSlug,
+            coverUrl = details.bannerUrl ?: details.coverUrl,
             onDismiss = { openThemeSheet = null }
         )
     }
@@ -1955,8 +1975,6 @@ private fun ContentRow(
             .memoryCacheKey(cacheKey.toString())
             .build()
     }
-    val copyToClipboard = rememberCopyToClipboard()
-    val copyLongClickLabel = stringResource(R.string.a11y_action_copy)
     val titleClipLabel = stringResource(R.string.clip_label_title)
     val copiedTitleMessage = stringResource(R.string.copied_title)
 
@@ -2021,15 +2039,7 @@ private fun ContentRow(
                             boundsTransform = { _, _ -> spatialSpec },
                             resizeMode = SharedTransitionScope.ResizeMode.scaleToBounds()
                         )
-                        .combinedClickable(
-                            onClick = {},
-                            onLongClick = {
-                                displayTitle?.let {
-                                    copyToClipboard(titleClipLabel, it, copiedTitleMessage)
-                                }
-                            },
-                            onLongClickLabel = copyLongClickLabel
-                        )
+                        .copyOnLongPress(displayTitle.orEmpty(), titleClipLabel, copiedTitleMessage)
                 )
             }
 
@@ -2045,7 +2055,8 @@ private fun ContentRow(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.copyOnLongPress(nativeTitle, titleClipLabel, copiedTitleMessage)
                 )
             }
 

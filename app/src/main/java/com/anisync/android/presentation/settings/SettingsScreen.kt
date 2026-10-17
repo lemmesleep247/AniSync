@@ -1,6 +1,7 @@
 package com.anisync.android.presentation.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.Tune
@@ -55,6 +57,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.LocalContext
 import com.anisync.android.BuildConfig
 import com.anisync.android.R
+import com.anisync.android.data.WhatsNewItem
+import com.anisync.android.presentation.components.WhatsNewDot
+import com.anisync.android.presentation.components.WhatsNewPill
+import com.anisync.android.presentation.components.rememberActiveWhatsNew
 import com.anisync.android.util.launchUrl
 import com.anisync.android.presentation.components.AppLinksPromptDialog
 import com.anisync.android.presentation.util.LocalAppSettings
@@ -62,7 +68,7 @@ import com.anisync.android.ui.theme.decorativeAvatarShape
 import com.anisync.android.ui.theme.resolveDarkTheme
 
 /** AniSync's Weblate project — community translation. Opened from the Settings top bar. */
-private const val WEBLATE_URL = "https://hosted.weblate.org/engage/anisync/"
+internal const val WEBLATE_URL = "https://hosted.weblate.org/engage/anisync/"
 
 private data class CategoryData(
     val key: String,
@@ -122,6 +128,7 @@ fun SettingsScreen(
         }
     ) {
         val isDark = uiState.themeMode.resolveDarkTheme()
+        val whatsNew = rememberActiveWhatsNew()
 
         OutlinedTextField(
             value = searchQuery,
@@ -159,6 +166,13 @@ fun SettingsScreen(
         )
 
         val allCategories = listOfNotNull(
+            CategoryData(
+                key = "general",
+                title = stringResource(R.string.settings_general),
+                subtitle = stringResource(R.string.settings_general_desc),
+                icon = Icons.Outlined.Settings,
+                onClick = { onCategorySelected(SettingsCategory.General) }
+            ),
             CategoryData(
                 key = "lookandfeel",
                 title = stringResource(R.string.settings_look_and_feel),
@@ -282,7 +296,8 @@ fun SettingsScreen(
                         customColors = getCategoryColors(category.key, isDark),
                         onClick = category.onClick,
                         selected = selectedCategory != null && category.key == selectedCategory.cardKey(),
-                        shape = shape
+                        shape = shape,
+                        badge = categoryBadge(category.key, whatsNew)
                     )
                 }
             }
@@ -298,7 +313,8 @@ fun ExpressiveCategoryItem(
     customColors: Pair<Color, Color>,
     onClick: () -> Unit,
     shape: androidx.compose.ui.graphics.Shape,
-    selected: Boolean = false
+    selected: Boolean = false,
+    badge: (@Composable () -> Unit)? = null
 ) {
     Surface(
         onClick = onClick,
@@ -344,14 +360,21 @@ fun ExpressiveCategoryItem(
             Spacer(modifier = Modifier.width(16.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = LocalContentColor.current,
-                    maxLines = 1
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = title,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = LocalContentColor.current,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    badge?.invoke()
+                }
                 Text(
                     text = subtitle,
                     overflow = TextOverflow.Ellipsis,
@@ -368,6 +391,7 @@ fun ExpressiveCategoryItem(
  *  show the selected state in the two-pane list-detail layout. (App Links has no category — never
  *  selected.) */
 private fun SettingsCategory.cardKey(): String = when (this) {
+    SettingsCategory.General -> "general"
     SettingsCategory.LookAndFeel -> "lookandfeel"
     SettingsCategory.AniList -> "anilist"
     SettingsCategory.Notifications -> "notifications"
@@ -379,9 +403,29 @@ private fun SettingsCategory.cardKey(): String = when (this) {
     SettingsCategory.DeveloperTools -> "dev_tools"
 }
 
+/**
+ * A category that is itself new wears the pill. One that only holds something new or moved gets the
+ * dot, which clears once everything inside has been seen.
+ */
+private fun categoryBadge(key: String, active: Set<WhatsNewItem>): (@Composable () -> Unit)? {
+    val leaf = when (key) {
+        "general" -> WhatsNewItem.SETTINGS_GENERAL
+        "lookandfeel" -> WhatsNewItem.SETTINGS_LOOK_AND_FEEL
+        else -> null
+    }
+    if (leaf != null && leaf in active) return { WhatsNewPill(leaf.kind) }
+    val inside = when (key) {
+        "general" -> listOf(WhatsNewItem.GENERAL_MOVED_NOTICE)
+        "storage" -> listOf(WhatsNewItem.STORAGE_COVER_QUALITY)
+        else -> emptyList()
+    }
+    return if (inside.any { it in active }) ({ WhatsNewDot() }) else null
+}
+
 private fun getCategoryColors(key: String, isDark: Boolean): Pair<Color, Color> {
     return if (isDark) {
         when (key) {
+            "general" -> Color(0xFF5F4100) to Color(0xFFFFDDB3)
             "lookandfeel" -> Color(0xFF7D5260) to Color(0xFFFFD8E4)
             "anilist" -> Color(0xFF2E4B5F) to Color(0xFFB8E6FF)
             "notifications" -> Color(0xFF3E4C63) to Color(0xFFD7E3FF)
@@ -396,6 +440,7 @@ private fun getCategoryColors(key: String, isDark: Boolean): Pair<Color, Color> 
         }
     } else {
         when (key) {
+            "general" -> Color(0xFFFFDDB3) to Color(0xFF2A1800)
             "lookandfeel" -> Color(0xFFFFD8E4) to Color(0xFF631835)
             "anilist" -> Color(0xFFB8E6FF) to Color(0xFF0E3346)
             "notifications" -> Color(0xFFD7E3FF) to Color(0xFF253347)

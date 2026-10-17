@@ -1,9 +1,11 @@
 package com.anisync.android.presentation.navigation
 
+import androidx.activity.BackEventCompat
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -17,6 +19,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.IntOffset
+import androidx.navigation.NavDestination
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -65,6 +69,7 @@ import com.anisync.android.presentation.settings.AcknowledgmentsScreen
 import com.anisync.android.presentation.settings.AniListSettingsScreen
 import com.anisync.android.presentation.settings.DeveloperToolsScreen
 import com.anisync.android.presentation.settings.FontSettingsScreen
+import com.anisync.android.presentation.settings.GeneralScreen
 import com.anisync.android.presentation.settings.LanguageScreen
 import com.anisync.android.presentation.settings.LinksScreen
 import com.anisync.android.presentation.settings.LookAndFeelScreen
@@ -74,7 +79,6 @@ import com.anisync.android.presentation.settings.OpenSourceLicensesScreen
 import com.anisync.android.presentation.settings.SettingsListDetail
 import com.anisync.android.presentation.settings.SponsorsScreen
 import com.anisync.android.presentation.settings.StorageScreen
-import com.anisync.android.presentation.settings.ThemeScreen
 import com.anisync.android.presentation.settings.UpdatesScreen
 import com.anisync.android.presentation.util.AniLinkCallbacks
 import com.anisync.android.presentation.util.LocalAniLinkCallbacks
@@ -92,6 +96,16 @@ private val tabOrder = mapOf(
     Forum::class.qualifiedName to 3,
     Profile::class.qualifiedName to 4
 )
+
+/** Destinations whose pops use the tab X-axis motion rather than a detail pop. */
+private fun NavDestination.popsLikeTab(): Boolean =
+    hasRoute<Login>() || hasRoute<Library>() || hasRoute<Discover>() || hasRoute<Feed>() ||
+        hasRoute<Forum>() || hasRoute<Profile>()
+
+/** Details that pop with a fade so the shared cover morph carries the motion. */
+private fun NavDestination.popsWithMorph(): Boolean =
+    hasRoute<MediaDetails>() || hasRoute<ReviewDetail>() || hasRoute<CharacterDetails>() ||
+        hasRoute<StaffDetails>()
 
 /**
  * Determines slide direction for tab transitions based on relative position.
@@ -211,6 +225,26 @@ fun AniSyncNavHost(
         )
     }
 
+    // ---- Predictive back on a detail -----------------------------------------
+    // The gesture scrubs this transition, so the page shrinks and drifts away from the edge the
+    // swipe started on. It stays opaque for most of the drag and only fades once the pop commits.
+
+    fun predictivePopExit(swipeEdge: Int): ExitTransition {
+        val direction = if (swipeEdge == BackEventCompat.EDGE_RIGHT) -1 else 1
+        return scaleOut(
+            animationSpec = scaleSpec,
+            targetScale = 0.9f
+        ) + slideOutHorizontally(
+            animationSpec = spatialSpec,
+            targetOffsetX = { it * direction / 8 }
+        ) + fadeOut(
+            animationSpec = keyframes {
+                durationMillis = 350
+                1f at 250
+            }
+        )
+    }
+
     SharedTransitionLayout(modifier = modifier) {
         // Provide centralized link routing callbacks so any screen can navigate
         // in-app when a recognizable AniList URL is clicked (forum posts, etc.)
@@ -250,7 +284,26 @@ fun AniSyncNavHost(
         NavHost(
             navController = navController,
             startDestination = startDestination,
-            modifier = Modifier
+            modifier = Modifier,
+            // A back gesture never reads a destination's own pop transitions, only these. Each
+            // mirrors what that destination does on a plain pop, except that a detail follows the
+            // edge the swipe started from.
+            predictivePopEnterTransition = {
+                val target = targetState.destination
+                when {
+                    target.popsLikeTab() -> sharedAxisXEnter(forward = false)
+                    target.popsWithMorph() -> fadeIn(animationSpec = effectsSpec)
+                    else -> sharedAxisZPopEnter()
+                }
+            },
+            predictivePopExitTransition = { swipeEdge ->
+                val initial = initialState.destination
+                when {
+                    initial.popsLikeTab() -> sharedAxisXExit(forward = false)
+                    initial.popsWithMorph() -> fadeOut(animationSpec = effectsSpec)
+                    else -> predictivePopExit(swipeEdge)
+                }
+            }
         ) {
             // =================================================================
             // LOGIN SCREEN
@@ -450,7 +503,9 @@ fun AniSyncNavHost(
                 popExitTransition = { sharedAxisZPopExit() },
                 deepLinks = listOf(
                     navDeepLink { uriPattern = "anisync://user/{username}" },
-                    navDeepLink { uriPattern = "https://anilist.co/user/{username}" }
+                    navDeepLink { uriPattern = "https://anilist.co/user/{username}" },
+                    // List, favourites and stats pages land on the profile itself
+                    navDeepLink { uriPattern = "https://anilist.co/user/{username}/.*" }
                 )
             ) {
                 val onProfileMediaClick = remember(onMediaClick) { 
@@ -538,12 +593,12 @@ fun AniSyncNavHost(
                     navDeepLink<MediaDetails>(basePath = "anisync://details"),
                     // AniList anime URLs (e.g., https://anilist.co/anime/16498)
                     navDeepLink { uriPattern = "https://anilist.co/anime/{mediaId}" },
-                    // AniList anime URLs with slug (e.g., https://anilist.co/anime/16498/attack-on-titan)
-                    navDeepLink { uriPattern = "https://anilist.co/anime/{mediaId}/{slug}" },
+                    // AniList anime URLs with a slug or a deeper tab (e.g., https://anilist.co/anime/16498/attack-on-titan/characters)
+                    navDeepLink { uriPattern = "https://anilist.co/anime/{mediaId}/.*" },
                     // AniList manga URLs (e.g., https://anilist.co/manga/30002)
                     navDeepLink { uriPattern = "https://anilist.co/manga/{mediaId}" },
-                    // AniList manga URLs with slug (e.g., https://anilist.co/manga/30002/berserk)
-                    navDeepLink { uriPattern = "https://anilist.co/manga/{mediaId}/{slug}" }
+                    // AniList manga URLs with a slug or a deeper tab (e.g., https://anilist.co/manga/30002/berserk/stats)
+                    navDeepLink { uriPattern = "https://anilist.co/manga/{mediaId}/.*" }
                 ),
                 // Fade only: the shared cover/title/container morph (card → page) carries the
                 // spatial motion. A horizontal slide here competed with that morph — the page
@@ -651,7 +706,7 @@ fun AniSyncNavHost(
                 deepLinks = listOf(
                     navDeepLink { uriPattern = "anisync://review/{reviewId}" },
                     navDeepLink { uriPattern = "https://anilist.co/review/{reviewId}" },
-                    navDeepLink { uriPattern = "https://anilist.co/review/{reviewId}/{slug}" }
+                    navDeepLink { uriPattern = "https://anilist.co/review/{reviewId}/.*" }
                 ),
                 // Fade only: the review card's banner morphs into the detail hero banner
                 // (shared bounds); a slide would double-move it, like the media cover did.
@@ -701,8 +756,8 @@ fun AniSyncNavHost(
                 deepLinks = listOf(
                     // AniList character URLs (e.g., https://anilist.co/character/40882)
                     navDeepLink { uriPattern = "https://anilist.co/character/{characterId}" },
-                    // AniList character URLs with slug
-                    navDeepLink { uriPattern = "https://anilist.co/character/{characterId}/{slug}" }
+                    // AniList character URLs with a slug
+                    navDeepLink { uriPattern = "https://anilist.co/character/{characterId}/.*" }
                 ),
                 // Fade only: the character image morphs from the cast row / VA card (shared
                 // bounds); a slide would double-move it, like the media cover did.
@@ -732,7 +787,7 @@ fun AniSyncNavHost(
             composable<StaffDetails>(
                 deepLinks = listOf(
                     navDeepLink { uriPattern = "https://anilist.co/staff/{staffId}" },
-                    navDeepLink { uriPattern = "https://anilist.co/staff/{staffId}/{slug}" }
+                    navDeepLink { uriPattern = "https://anilist.co/staff/{staffId}/.*" }
                 ),
                 // Fade only: the staff image morphs from the staff row (shared bounds);
                 // a slide would double-move it, like the media cover did.
@@ -762,7 +817,7 @@ fun AniSyncNavHost(
             composable<StudioDetails>(
                 deepLinks = listOf(
                     navDeepLink { uriPattern = "https://anilist.co/studio/{studioId}" },
-                    navDeepLink { uriPattern = "https://anilist.co/studio/{studioId}/{slug}" }
+                    navDeepLink { uriPattern = "https://anilist.co/studio/{studioId}/.*" }
                 ),
                 enterTransition = { sharedAxisZEnter() },
                 exitTransition = { sharedAxisZExit() },
@@ -1010,7 +1065,7 @@ fun AniSyncNavHost(
                 deepLinks = listOf(
                     navDeepLink<ActivityDetail>(basePath = "anisync://activity"),
                     navDeepLink { uriPattern = "https://anilist.co/activity/{activityId}" },
-                    navDeepLink { uriPattern = "https://anilist.co/activity/{activityId}/{slug}" }
+                    navDeepLink { uriPattern = "https://anilist.co/activity/{activityId}/.*" }
                 ),
                 enterTransition = { sharedAxisZEnter() },
                 exitTransition = { sharedAxisZExit() },
@@ -1188,6 +1243,19 @@ fun AniSyncNavHost(
                 )
             }
 
+            // General settings
+            composable<SettingsGeneral>(
+                enterTransition = { sharedAxisZEnter() },
+                exitTransition = { sharedAxisZExit() },
+                popEnterTransition = { sharedAxisZPopEnter() },
+                popExitTransition = { sharedAxisZPopExit() }
+            ) {
+                GeneralScreen(
+                    onBackClick = { navController.popBackStack() },
+                    onNavigateToLanguage = { navController.navigate(SettingsLanguage) }
+                )
+            }
+
             // Look and Feel Settings
             composable<SettingsLookAndFeel>(
                 enterTransition = { sharedAxisZEnter() },
@@ -1196,20 +1264,6 @@ fun AniSyncNavHost(
                 popExitTransition = { sharedAxisZPopExit() }
             ) {
                 LookAndFeelScreen(
-                    onBackClick = { navController.popBackStack() },
-                    onNavigateToTheme = { navController.navigate(SettingsTheme) },
-                    onNavigateToLanguage = { navController.navigate(SettingsLanguage) }
-                )
-            }
-
-            // Theme picker (light/dark/system + AMOLED)
-            composable<SettingsTheme>(
-                enterTransition = { sharedAxisZEnter() },
-                exitTransition = { sharedAxisZExit() },
-                popEnterTransition = { sharedAxisZPopEnter() },
-                popExitTransition = { sharedAxisZPopExit() }
-            ) {
-                ThemeScreen(
                     onBackClick = { navController.popBackStack() }
                 )
             }

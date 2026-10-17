@@ -33,10 +33,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -60,6 +61,7 @@ import com.anisync.android.domain.formatScore
 import com.anisync.android.presentation.components.filtersheet.FilterOptionRow
 import com.anisync.android.presentation.components.filtersheet.FilterSheetScaffold
 import com.anisync.android.presentation.components.menu.Menu
+import com.anisync.android.presentation.components.rememberControlledSliderState
 import com.anisync.android.presentation.library.BulkKind
 import com.anisync.android.presentation.library.BulkOperation
 import com.anisync.android.presentation.util.bouncyClickable
@@ -331,7 +333,10 @@ fun BulkStatusSheet(
     FilterSheetScaffold(
         title = stringResource(R.string.library_set_status),
         onDismiss = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        sheetState = rememberBottomSheetState(
+            initialValue = SheetValue.Hidden,
+            enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
+        )
     ) {
         statuses.forEach { status ->
             FilterOptionRow(
@@ -421,7 +426,10 @@ fun BulkPrioritySheet(
     FilterSheetScaffold(
         title = stringResource(R.string.library_set_priority),
         onDismiss = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        sheetState = rememberBottomSheetState(
+            initialValue = SheetValue.Hidden,
+            enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
+        )
     ) {
         levels.forEach { level ->
             val selected = picked == level
@@ -528,7 +536,10 @@ fun BulkScoreSheet(
     FilterSheetScaffold(
         title = stringResource(R.string.library_set_score),
         onDismiss = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        sheetState = rememberBottomSheetState(
+            initialValue = SheetValue.Hidden,
+            enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
+        )
     ) {
         Column(modifier = Modifier.padding(horizontal = 24.dp)) {
             Text(
@@ -539,10 +550,12 @@ fun BulkScoreSheet(
                 modifier = Modifier.padding(vertical = 8.dp)
             )
             Slider(
-                value = value,
+                state = rememberControlledSliderState(
+                    value = value,
+                    valueRange = 0f..max,
+                    steps = steps
+                ),
                 onValueChange = { value = it },
-                valueRange = 0f..max,
-                steps = steps
             )
             Text(
                 text = stringResource(R.string.library_bulk_one_request, count),
@@ -581,7 +594,10 @@ fun BulkAddToListSheet(
     FilterSheetScaffold(
         title = stringResource(R.string.library_add_to_list),
         onDismiss = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        sheetState = rememberBottomSheetState(
+            initialValue = SheetValue.Hidden,
+            enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
+        )
     ) {
         if (lists.isEmpty()) {
             Text(

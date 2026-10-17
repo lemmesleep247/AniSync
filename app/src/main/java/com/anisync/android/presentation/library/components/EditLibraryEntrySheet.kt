@@ -55,7 +55,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -89,8 +89,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.anisync.android.R
 import com.anisync.android.data.TitleLanguage
 import com.anisync.android.domain.LibraryEntry
@@ -106,6 +107,7 @@ import com.anisync.android.presentation.components.AppModalBottomSheet
 import com.anisync.android.presentation.components.alert.LocalToastManager
 import com.anisync.android.presentation.components.alert.OverlayToastHost
 import com.anisync.android.presentation.components.iconRes
+import com.anisync.android.presentation.components.rememberControlledSliderState
 import com.anisync.android.presentation.components.toIndicatorKind
 import com.anisync.android.presentation.util.rememberHapticFeedback
 import com.anisync.android.presentation.util.toIconRes
@@ -195,8 +197,9 @@ fun EditLibraryEntrySheet(
     val dirty = remember { mutableStateOf(false) }
     LaunchedEffect(hasChanges) { dirty.value = hasChanges }
 
-    val sheetState = rememberModalBottomSheetState(
-        skipPartiallyExpanded = true,
+    val sheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
         confirmValueChange = { target ->
             if (target == SheetValue.Hidden && dirty.value) {
                 showDiscardDialog = true
@@ -247,6 +250,7 @@ fun EditLibraryEntrySheet(
 
         Column(modifier = Modifier.fillMaxWidth().imePadding()) {
             EditEntryTopBar(
+                title = stringResource(R.string.edit_entry),
                 saveEnabled = hasChanges,
                 onClose = { if (hasChanges) showDiscardDialog = true else onDismiss() },
                 onSave = {
@@ -452,10 +456,106 @@ fun EditLibraryEntrySheet(
     }
 }
 
+/**
+ * Asked once an entry has just been finished through a quick action (the last + or the Completed
+ * status) and still has no score. It is the score half of [EditLibraryEntrySheet], built from the
+ * same parts, so a score set here reads and behaves exactly like one set in the full sheet.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ScoreOnCompleteSheet(
+    entry: LibraryEntry,
+    titleLanguage: TitleLanguage,
+    scoreFormat: ScoreFormat,
+    advancedScoringCategories: List<String>,
+    onDismiss: () -> Unit,
+    onSave: (score: Double, advancedScores: Map<String, Double>, notes: String) -> Unit
+) {
+    var score by rememberSaveable(entry.mediaId) { mutableDoubleStateOf(0.0) }
+    var notes by rememberSaveable(entry.mediaId) { mutableStateOf(entry.notes.orEmpty()) }
+    var advancedScores by remember(entry.mediaId) { mutableStateOf(emptyMap<String, Double>()) }
+    var typingScore by remember { mutableStateOf(false) }
+    val haptics = rememberHapticFeedback()
+    val isAnime = entry.type != MediaType.MANGA
+
+    AppModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberBottomSheetState(
+            initialValue = SheetValue.Hidden,
+            enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
+        ),
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentColor = MaterialTheme.colorScheme.onSurface
+    ) {
+        OverlayToastHost(toastManager = LocalToastManager.current)
+
+        Column(modifier = Modifier.fillMaxWidth().imePadding()) {
+            EditEntryTopBar(
+                title = stringResource(
+                    if (isAnime) R.string.score_prompt_title_anime else R.string.score_prompt_title_manga
+                ),
+                saveEnabled = score > 0 || notes != entry.notes.orEmpty(),
+                onClose = onDismiss,
+                onSave = {
+                    haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                    onSave(score, advancedScores, notes)
+                }
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 24.dp, end = 24.dp, bottom = 20.dp)
+                    .navigationBarsPadding(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                MediaRow(entry = entry, titleLanguage = titleLanguage)
+
+                ScoreCard(
+                    score = score,
+                    scoreFormat = scoreFormat,
+                    categories = advancedScoringCategories,
+                    advancedScores = advancedScores,
+                    onScoreChange = { score = it },
+                    onClear = {
+                        score = 0.0
+                        advancedScores = emptyMap()
+                    },
+                    onCategoryChange = { name, value ->
+                        val next = advancedScores.toMutableMap()
+                        if (value <= 0.0) next.remove(name) else next[name] = value
+                        advancedScores = next
+                        // AniList treats the overall score as the average of the rated categories.
+                        val rated = next.values.filter { it > 0.0 }
+                        if (rated.isNotEmpty()) score = scoreFormat.snap(rated.average())
+                    },
+                    onTypeRequest = { typingScore = true }
+                )
+
+                NotesField(notes = notes, onNotesChange = { notes = it })
+            }
+        }
+    }
+
+    if (typingScore) {
+        NumberPromptDialog(
+            prompt = NumberPrompt.Score(score, scoreFormat),
+            onDismiss = { typingScore = false },
+            onConfirm = { value ->
+                score = value.coerceIn(0.0, scoreFormat.max)
+                typingScore = false
+            }
+        )
+    }
+}
+
 // ================== TOP BAR ==================
 
 @Composable
 private fun EditEntryTopBar(
+    title: String,
     saveEnabled: Boolean,
     onClose: () -> Unit,
     onSave: () -> Unit
@@ -476,7 +576,7 @@ private fun EditEntryTopBar(
         }
 
         Text(
-            text = stringResource(R.string.edit_entry),
+            text = title,
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f)
@@ -1104,10 +1204,12 @@ private fun ScoreCard(
                 ScoreFormat.POINT_5 -> StarRow(score = score.toInt(), onScoreChange = { onScoreChange(it.toDouble()) })
                 ScoreFormat.POINT_3 -> SmileyRow(score = score.toInt(), onScoreChange = { onScoreChange(it.toDouble()) })
                 else -> Slider(
-                    value = score.toFloat().coerceIn(0f, scoreFormat.max.toFloat()),
+                    state = rememberControlledSliderState(
+                        value = score.toFloat().coerceIn(0f, scoreFormat.max.toFloat()),
+                        valueRange = 0f..scoreFormat.max.toFloat(),
+                        steps = scoreFormat.sliderSteps
+                    ),
                     onValueChange = { onScoreChange(scoreFormat.snap(it.toDouble())) },
-                    valueRange = 0f..scoreFormat.max.toFloat(),
-                    steps = scoreFormat.sliderSteps,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -1171,10 +1273,12 @@ private fun CategoryScores(
                         )
                     }
                     Slider(
-                        value = value.toFloat().coerceIn(0f, scoreFormat.max.toFloat()),
+                        state = rememberControlledSliderState(
+                            value = value.toFloat().coerceIn(0f, scoreFormat.max.toFloat()),
+                            valueRange = 0f..scoreFormat.max.toFloat(),
+                            steps = scoreFormat.sliderSteps
+                        ),
                         onValueChange = { onCategoryChange(category, scoreFormat.snap(it.toDouble())) },
-                        valueRange = 0f..scoreFormat.max.toFloat(),
-                        steps = scoreFormat.sliderSteps,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -1712,17 +1816,19 @@ private fun DatePickerSheet(
             }
         }
     ) {
-        DatePicker(
-            state = datePickerState,
-            title = {
-                Text(
-                    text = title,
-                    modifier = Modifier.padding(start = 24.dp, end = 12.dp, top = 16.dp),
-                    style = MaterialTheme.typography.labelLarge
-                )
-            },
-            headline = null
-        )
+        CalendarAfterKeyboard(datePickerState) { pickerState ->
+            DatePicker(
+                state = pickerState,
+                title = {
+                    Text(
+                        text = title,
+                        modifier = Modifier.padding(start = 24.dp, end = 12.dp, top = 16.dp),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                },
+                headline = null
+            )
+        }
     }
 }
 

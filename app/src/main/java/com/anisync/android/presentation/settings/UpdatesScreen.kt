@@ -48,7 +48,7 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
@@ -63,7 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import com.anisync.android.BuildConfig
 import com.anisync.android.R
 import com.anisync.android.data.update.Release
@@ -186,8 +186,8 @@ fun UpdateDialog(
     val isDownloading = updateState is UpdateState.Downloading
     val isDownloadingState by rememberUpdatedState(isDownloading)
 
-    val sheetState = rememberModalBottomSheetState(
-        skipPartiallyExpanded = false,
+    val sheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
         confirmValueChange = { sheetValue ->
             if (isDownloadingState && sheetValue == SheetValue.Hidden) false else true
         }

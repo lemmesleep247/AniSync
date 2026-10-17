@@ -14,8 +14,9 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import coil.ImageLoader
-import coil.ImageLoaderFactory
+import coil3.ImageLoader
+import coil3.PlatformContext
+import coil3.SingletonImageLoader
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -28,7 +29,8 @@ import kotlin.system.exitProcess
 import kotlin.system.measureTimeMillis
 
 @HiltAndroidApp
-class AniSyncApplication : Application(), Configuration.Provider, ImageLoaderFactory {
+class AniSyncApplication : Application(), Configuration.Provider,
+    SingletonImageLoader.Factory {
 
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
@@ -41,6 +43,9 @@ class AniSyncApplication : Application(), Configuration.Provider, ImageLoaderFac
 
     @Inject
     lateinit var appLockManager: com.anisync.android.data.security.AppLockManager
+
+    @Inject
+    lateinit var appIconManager: com.anisync.android.data.AppIconManager
 
     @Inject
     lateinit var updateManager: com.anisync.android.data.update.UpdateManager
@@ -59,12 +64,22 @@ class AniSyncApplication : Application(), Configuration.Provider, ImageLoaderFac
         } + Dispatchers.Default
     )
 
+    private val workMetrics by lazy {
+        if (BuildConfig.DEBUG) com.anisync.android.worker.WorkMetricsLog.start(this, applicationScope) else null
+    }
+
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
+            .apply {
+                workMetrics?.let {
+                    setScheduleEventListener(it)
+                    setExecutionEventListener(it)
+                }
+            }
             .build()
 
-    override fun newImageLoader(): ImageLoader = imageLoader
+    override fun newImageLoader(context: PlatformContext): ImageLoader = imageLoader
 
     override fun onCreate() {
         super.onCreate()
@@ -82,6 +97,9 @@ class AniSyncApplication : Application(), Configuration.Provider, ImageLoaderFac
         // App lock: observe app-level background/foreground so the lock re-arms when AniSync is sent
         // to the background. Registered here (main thread, once) rather than per-activity.
         appLockManager.bindTo(androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle)
+
+        // A new launcher icon is applied once the app is backgrounded, never while it is on screen.
+        appIconManager.bindTo(androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle)
 
         val mainThreadTime = measureTimeMillis {
             com.anisync.android.worker.NotificationChannels.createChannels(this)

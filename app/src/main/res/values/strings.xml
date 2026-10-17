@@ -470,17 +470,25 @@
     <!-- Theme Palette Selection -->
     <string name="color_and_style">Color &amp; Style</string>
     <string name="palette_style">Palette Style</string>
-    <string name="custom_color">Custom Color</string>
-    <string name="custom_color_description">Pick a seed color to generate your unique theme palette.</string>
+    <string name="custom_color">Custom color</string>
+    <string name="custom_color_description">Pick any color and AniSync builds the whole theme from it.</string>
     <string name="quick_pick">Quick Pick</string>
-    <string name="hue_slider">Fine Tune</string>
+    <string name="hue_slider">Hue</string>
     <string name="preview">Preview</string>
     <string name="color_scheme">Color Scheme</string>
     <string name="apply">Apply</string>
     <string name="dark_mode">Dark Mode</string>
     <string name="dark_mode_override">Override system setting</string>
-    <string name="setting_haptic_feedback">Haptic Feedback</string>
+    <string name="setting_haptic_feedback">Haptic feedback</string>
     <string name="setting_haptic_description">Vibrate on touch interactions</string>
+    <string name="setting_score_on_complete">Ask for a score when finishing</string>
+    <string name="setting_score_on_complete_desc">When a title on your list moves to Completed. Adding a new title as Completed never asks.</string>
+    <string name="setting_app_icon">App icon</string>
+    <string name="setting_app_icon_desc">The new icon appears once you leave the app. A shortcut pinned to the home screen may need adding again.</string>
+    <string name="app_icon_ink">Ink</string>
+    <string name="app_icon_white">White</string>
+    <string name="app_icon_blue">Blue</string>
+    <string name="app_icon_sync">Sync</string>
     <string name="settings_navigation">Navigation</string>
     <string name="setting_nav_bar_style">Bottom bar style</string>
     <string name="setting_nav_bar_style_anchored">Anchored</string>
@@ -488,7 +496,7 @@
     <string name="setting_nav_bar_style_floating">Floating pill</string>
     <string name="setting_nav_bar_style_floating_desc">Detached pill with margins from the edges</string>
     <string name="setting_nav_bar_show_labels">Show labels</string>
-    <string name="setting_nav_bar_show_labels_desc">Show destination titles beside each icon</string>
+    <string name="setting_nav_bar_show_labels_desc">Text under each tab icon</string>
     <string name="nav_bar_style_dialog_title">Bottom bar style</string>
     <string name="setting_nav_bar_corner_radius">Corner radius</string>
     <string name="setting_avatar_shape">Avatar Shape</string>
@@ -513,7 +521,7 @@
     <string name="avatar_shape_ghostish_desc">A playful, ghost-like shape</string>
     <string name="avatar_shape_none">None</string>
     <string name="avatar_shape_none_desc">Show the avatar image in its natural shape</string>
-    <string name="setting_streaming_service">Streaming Service</string>
+    <string name="setting_streaming_service">Streaming service</string>
     <string name="setting_streaming_service_desc">Choose your preferred streaming platform for the Up Next widget icon</string>
     <string name="control_notifications">Notifications</string>
     <string name="notification_watching">Watching List</string>
@@ -567,8 +575,8 @@
 
     <!-- Settings Screens -->
     <string name="navigate_back">Go back</string>
-    <string name="settings_look_and_feel">Look and Feel</string>
-    <string name="settings_look_and_feel_desc">Theme, language, streaming service</string>
+    <string name="settings_look_and_feel">Look and feel</string>
+    <string name="settings_look_and_feel_desc">Theme, display size, colors, bottom bar, avatars, app icon</string>
 
     <!-- App lock (biometric / device credential) -->
     <string name="settings_app_lock">App lock</string>
@@ -619,7 +627,7 @@
     <string name="about_improve_translations">Improve translations</string>
     <string name="about_improve_translations_desc">Help translate %s</string>
     <string name="settings_title_language">Title Language</string>
-    <string name="settings_app_language">App Language</string>
+    <string name="settings_app_language">App language</string>
     <string name="settings_app_language_system_desc">Uses your device language setting</string>
     <string name="settings_cover_quality">Cover image quality</string>
     <string name="settings_cover_quality_desc">Applies to every cover shown in the app. Higher quality looks sharper but uses more data and storage.</string>
@@ -962,6 +970,10 @@
         <item quantity="one">%d ending</item>
         <item quantity="other">%d endings</item>
     </plurals>
+    <plurals name="themes_inserts_count">
+        <item quantity="one">%d insert song</item>
+        <item quantity="other">%d insert songs</item>
+    </plurals>
     <plurals name="themes_versions_count">
         <item quantity="one">%d version</item>
         <item quantity="other">%d versions</item>
@@ -969,6 +981,8 @@
     <string name="themes_filter_all">All</string>
     <string name="themes_group_openings">Openings</string>
     <string name="themes_group_endings">Endings</string>
+    <string name="themes_group_inserts">Insert songs</string>
+    <string name="themes_filter_inserts">Inserts</string>
     <plurals name="themes_episodes">
         <item quantity="one">Episode %1$s</item>
         <item quantity="other">Episodes %1$s</item>
@@ -978,6 +992,8 @@
     <string name="themes_episode_scale">Ep 1 – %1$d</string>
     <string name="themes_opening_number">Opening %1$d</string>
     <string name="themes_ending_number">Ending %1$d</string>
+    <string name="themes_insert_number">Insert song %1$d</string>
+    <string name="themes_insert">Insert song</string>
     <string name="themes_spoiler_tag">Spoiler</string>
     <string name="cd_theme_spoiler">This theme may spoil the show</string>
     <string name="themes_failed_title">Themes did not load</string>
@@ -993,6 +1009,11 @@
     <string name="themes_variant_with_credits">With credits</string>
     <string name="themes_variant_subbed">Subbed</string>
     <string name="themes_variant_lyrics">Lyrics</string>
+    <string name="themes_variant_transition">Transition</string>
+    <string name="themes_variant_over">Over episode</string>
+    <string name="themes_variant_audio">Audio only</string>
+    <string name="themes_performers">Performers</string>
+    <string name="themes_performer_as">as %1$s</string>
     <string name="themes_open_source">Open on AnimeThemes</string>
     <string name="themes_attribution">Theme data and video from AnimeThemes.moe</string>
     <string name="themes_actions_label">Elsewhere</string>
@@ -1051,6 +1072,8 @@
     <string name="edit_entry_finish_body">Move it to Completed and set today as the finish date.</string>
     <string name="edit_entry_finish_apply">Mark completed</string>
     <string name="edit_entry_finish_dismiss">Not now</string>
+    <string name="score_prompt_title_anime">Finished watching. How was it?</string>
+    <string name="score_prompt_title_manga">Finished reading. How was it?</string>
     <string name="edit_entry_discard_title">Discard your changes?</string>
     <string name="edit_entry_discard_body">This entry has edits you have not saved yet.</string>
     <string name="edit_entry_discard_confirm">Discard</string>
@@ -1947,7 +1970,7 @@
     <string name="onboarding_perm_action_open">Open</string>
 
     <string name="onboarding_personalise_headline">Make it yours</string>
-    <string name="onboarding_personalise_body">Four small choices. Every one of them lives in Look and Feel afterwards.</string>
+    <string name="onboarding_personalise_body">Four small choices. You can change every one of them in Settings later.</string>
     <string name="onboarding_personalise_accent">ACCENT</string>
     <string name="onboarding_personalise_theme">THEME</string>
     <string name="onboarding_personalise_titles">TITLES</string>
@@ -2336,4 +2359,55 @@
     <string name="a11y_nav_search_tab">Search %1$s</string>
     <string name="settings_nav_double_tap_search">Double-tap to search</string>
     <string name="settings_nav_double_tap_search_desc">Tap a tab twice to open its search. Tapping the tab you are on scrolls it back to the top</string>
+    <string name="settings_general">General</string>
+    <string name="settings_general_desc">Start screen, language, app lock, streaming</string>
+    <string name="settings_section_opening">Opening the app</string>
+    <string name="settings_section_tabs_touch">Tabs and touch</string>
+    <string name="settings_section_language">Language</string>
+    <string name="settings_section_watching">Watching</string>
+    <string name="setting_streaming_service_sheet_desc">Episode alerts and the Up Next widget link to this service when a title is on it. Otherwise they use the first streaming link the title lists.</string>
+    <string name="streaming_service_none_desc">First streaming link</string>
+    <string name="settings_section_covers">Covers</string>
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="setting_pure_black">Pure black in dark mode</string>
+    <string name="setting_pure_black_desc">Black backgrounds when dark is on. Saves power on OLED screens.</string>
+    <string name="settings_section_display_size">Display size</string>
+    <!-- Sample glyphs drawn at each display size. Use the first letters of your alphabet. -->
+    <string name="display_size_sample">Aa</string>
+    <string name="display_size_small">Small</string>
+    <string name="display_size_default">Default</string>
+    <string name="display_size_large">Large</string>
+    <string name="display_size_larger">Larger</string>
+    <string name="setting_display_size_desc">Scales text, icons and spacing everywhere in AniSync. Your phone’s own display size and font size still apply.</string>
+    <string name="settings_section_color">Color</string>
+    <string name="setting_color_style">Color style</string>
+    <string name="setting_color_style_dynamic_desc">Your wallpaper sets the colors</string>
+    <string name="setting_color_style_sheet_desc">How your color spreads across the app. Each preview uses the color you picked.</string>
+    <string name="setting_respect_profile_colors_short_desc">Take on a user’s chosen color on their profile</string>
+    <string name="setting_media_artwork_theming_short_desc">Tint a title’s page with its cover art</string>
+    <string name="settings_section_bottom_bar">Bottom bar</string>
+    <string name="setting_nav_bar_style_floating_short">Floating</string>
+    <string name="settings_section_avatars">Avatars</string>
+    <string name="avatar_shape_short_clover">8-leaf</string>
+    <string name="avatar_shape_short_clover_4_leaf">4-leaf</string>
+    <string name="avatar_shape_short_ghostish">Ghost</string>
+    <string name="color_custom">Custom</string>
+    <string name="hex_code">Hex code</string>
+    <string name="paste">Paste</string>
+    <string name="color_role_primary">Primary</string>
+    <string name="color_role_container">Container</string>
+    <string name="color_role_tertiary">Tertiary</string>
+    <string name="color_role_surface">Surface</string>
+    <string name="language_system_default">System default</string>
+    <string name="language_system_default_desc">Follows your phone. %1$s right now.</string>
+    <string name="language_all">All languages</string>
+    <string name="language_help_translate">Help translate AniSync</string>
+    <string name="language_help_translate_desc">Missing your language, or spotted a mistake? Translations come from volunteers on Weblate.</string>
+    <string name="whats_new_new">New</string>
+    <string name="whats_new_moved">Moved</string>
+    <string name="a11y_whats_new_inside">Something new inside</string>
+    <string name="whats_new_general_notice">These used to be in Look and feel.</string>
+    <string name="dev_tools_reset_whats_new">Reset what’s new</string>
+    <string name="dev_tools_reset_whats_new_subtitle">Shows every New and Moved badge again, as if the update just landed</string>
+    <string name="dismiss">Dismiss</string>
 </resources>

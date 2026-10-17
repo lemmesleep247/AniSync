@@ -1,59 +1,56 @@
 package com.anisync.android.presentation.settings
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.BorderStroke
+import android.os.Build
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Label
+import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.Face
-import androidx.compose.material.icons.filled.HighQuality
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Navigation
-import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.RoundedCorner
-import androidx.compose.material.icons.filled.Translate
-import androidx.compose.material.icons.filled.Vibration
-import androidx.compose.material.icons.filled.VideoLibrary
-import androidx.compose.material.icons.outlined.DynamicFeed
-import androidx.compose.material.icons.outlined.Explore
-import androidx.compose.material.icons.outlined.Forum
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material3.BottomSheetDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -61,747 +58,377 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.anisync.android.presentation.settings.components.SettingsPickerSheet
-import com.anisync.android.presentation.util.LocalAppSettings
-import coil.compose.AsyncImage
 import com.anisync.android.R
+import com.anisync.android.data.AppIcon
 import com.anisync.android.data.AppSettings
-import com.anisync.android.data.CoverQuality
+import com.anisync.android.data.AvatarShape
+import com.anisync.android.data.DisplaySize
 import com.anisync.android.data.NavBarStyle
-import com.anisync.android.data.StartScreen
-import com.anisync.android.data.StreamingService
 import com.anisync.android.data.ThemeMode
-import com.anisync.android.presentation.components.AppModalBottomSheet
+import com.anisync.android.data.WhatsNewItem
+import com.anisync.android.presentation.components.LocalWhatsNew
+import com.anisync.android.presentation.components.CollapsingTopBarScaffold
+import com.anisync.android.presentation.components.rememberControlledSliderState
+import com.anisync.android.presentation.settings.components.CUSTOM_PALETTE_ID
+import com.anisync.android.presentation.settings.components.ColorPickerSheet
+import com.anisync.android.presentation.settings.components.ColorSchemeGrid
+import com.anisync.android.presentation.settings.components.LookAndFeelPreview
+import com.anisync.android.presentation.settings.components.PaletteStyleSheet
+import com.anisync.android.presentation.util.adaptiveReadingWidth
+import com.anisync.android.ui.theme.PresetPalettes
 import com.anisync.android.ui.theme.resolveDarkTheme
-import androidx.compose.material.icons.filled.Search
+import com.anisync.android.ui.theme.toDescription
+import com.anisync.android.ui.theme.toDisplayName
+import com.materialkolor.PaletteStyle
+import com.materialkolor.dynamiccolor.ColorSpec
+import com.materialkolor.material3.dynamicColorScheme
+import kotlin.math.abs
 
-private val StreamingServices = StreamingService.entries
-private val CoverQualities = CoverQuality.entries
-private val NavBarStyles = NavBarStyle.entries
-private val AvatarShapes = com.anisync.android.data.AvatarShape.entries
+/** Below this width the page is one column. At or above it the preview and mode stay pinned. */
+private val TwoColumnMinWidth = 720.dp
 
+private const val DISPLAY_SIZE_SETTLE_FRAMES = 12
+
+/**
+ * Everything about how the app looks, each choice drawn as what it produces. Theme choices apply
+ * app-wide as they are made, so the preview at the top is the real result.
+ *
+ * On wide panes the preview and Appearance are pinned in the left column and the remaining choices
+ * scroll beside them, so the preview stays in view while they change.
+ */
 @Composable
 fun LookAndFeelScreen(
     onBackClick: () -> Unit,
-    onNavigateToTheme: () -> Unit,
-    onNavigateToLanguage: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val themeMode = uiState.themeMode
-    val preferredStreamingService = uiState.preferredStreamingService
-    val hapticEnabled = uiState.hapticEnabled
-    val appLockEnabled = uiState.appLockEnabled
-    val appLocale = uiState.appLocale
-    val coverQuality = uiState.coverQuality
-    val navBarStyle = uiState.navBarStyle
-    val navBarShowLabels = uiState.navBarShowLabels
-    val navBarDoubleTapSearch = uiState.navBarDoubleTapSearch
-    val navBarCornerRadius = uiState.navBarCornerRadius
-    val avatarShape = uiState.avatarShape
-    val avatarBackgroundEnabled = uiState.avatarBackgroundEnabled
+    val appIcon by viewModel.appIcon.collectAsStateWithLifecycle()
+    val isDarkMode = uiState.themeMode.resolveDarkTheme()
+    val whatsNewStore = LocalWhatsNew.current
+    LaunchedEffect(Unit) { whatsNewStore.markSeen(WhatsNewItem.SETTINGS_LOOK_AND_FEEL) }
 
-    var showStreamingServiceSheet by rememberSaveable { mutableStateOf(false) }
-    var showCoverQualitySheet by rememberSaveable { mutableStateOf(false) }
-    var showNavBarStyleSheet by rememberSaveable { mutableStateOf(false) }
-    var showStartScreenSheet by rememberSaveable { mutableStateOf(false) }
-    // Read straight off AppSettings: the ViewModel's uiState is assembled from combines that
-    // are already at their arity ceiling, and this is a single value with a single writer.
-    val startScreen by LocalAppSettings.current.startScreen.collectAsStateWithLifecycle()
-    var showAvatarShapeDialog by rememberSaveable { mutableStateOf(false) }
+    val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val palettes = remember(supportsDynamicColor) {
+        if (supportsDynamicColor) {
+            PresetPalettes.all
+        } else {
+            // Pre-Android-12 "dynamic" resolves to the static brand scheme. It stays selectable as
+            // "Default", since hiding it made the fallback below rewrite the persisted setting.
+            listOf(PresetPalettes.Dynamic.copy(name = "Default")) +
+                PresetPalettes.all.filter { !it.isDynamic }
+        }
+    }
+    val selectedPaletteId = uiState.selectedPaletteId
+    val customSeedColor = uiState.customSeedColor
 
-    val isDarkMode = themeMode.resolveDarkTheme()
+    LaunchedEffect(selectedPaletteId, palettes, customSeedColor, uiState.isLoaded) {
+        val known = palettes.any { it.id == selectedPaletteId } ||
+            (selectedPaletteId == CUSTOM_PALETTE_ID && customSeedColor != null)
+        if (uiState.isLoaded && !known) {
+            viewModel.onAction(SettingsAction.SetSelectedPalette(palettes.firstOrNull()?.id ?: "dynamic"))
+        }
+    }
 
-    if (showStreamingServiceSheet) {
-        StreamingServiceSelectionSheet(
-            currentService = preferredStreamingService,
-            onServiceSelected = {
-                viewModel.onAction(SettingsAction.SetPreferredStreamingService(it))
-                showStreamingServiceSheet = false
+    // The seed the current palette builds from. Null for the dynamic palette, whose style the
+    // wallpaper decides.
+    val seedColor: Color? = if (selectedPaletteId == CUSTOM_PALETTE_ID) {
+        customSeedColor
+    } else {
+        palettes.find { it.id == selectedPaletteId }?.takeUnless { it.isDynamic }?.seedColor
+    }
+
+    var showColorPicker by rememberSaveable { mutableStateOf(false) }
+    var showStyleSheet by rememberSaveable { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+
+    // A new display size relayouts the whole page. Where the tiles sat before the tap is kept, so
+    // the page scrolls them back under the finger instead of letting the content above push them.
+    // The top bar re-clamps over the next few frames, so the tiles are re-pinned until it settles.
+    var displaySizeTilesY by remember { mutableFloatStateOf(0f) }
+    var displaySizeAnchorY by remember { mutableStateOf<Float?>(null) }
+    val density = LocalDensity.current
+    LaunchedEffect(density) {
+        val anchor = displaySizeAnchorY ?: return@LaunchedEffect
+        displaySizeAnchorY = null
+        repeat(DISPLAY_SIZE_SETTLE_FRAMES) {
+            withFrameNanos { }
+            val drift = displaySizeTilesY - anchor
+            if (abs(drift) >= 1f) listState.scrollBy(drift)
+        }
+    }
+
+    if (showColorPicker) {
+        ColorPickerSheet(
+            currentColor = customSeedColor,
+            isDarkMode = isDarkMode,
+            paletteStyle = uiState.paletteStyle,
+            onColorSelected = { color ->
+                viewModel.onAction(SettingsAction.SetCustomSeedColor(color))
+                viewModel.onAction(SettingsAction.SetSelectedPalette(CUSTOM_PALETTE_ID))
             },
-            onDismiss = { showStreamingServiceSheet = false }
+            onDismiss = { showColorPicker = false }
         )
     }
 
-    if (showCoverQualitySheet) {
-        CoverQualitySelectionSheet(
-            currentQuality = coverQuality,
-            onQualitySelected = {
-                viewModel.onAction(SettingsAction.SetCoverQuality(it))
-            },
-            onDismiss = { showCoverQualitySheet = false }
-        )
-    }
-
-    if (showStartScreenSheet) {
-        SettingsPickerSheet(
-            title = stringResource(R.string.setting_start_screen),
-            items = StartScreen.entries,
-            selected = startScreen,
-            itemLabel = { startScreenLabel(it) },
-            onSelect = {
-                viewModel.onAction(SettingsAction.SetStartScreen(it))
-                showStartScreenSheet = false
-            },
-            onDismiss = { showStartScreenSheet = false }
-        )
-    }
-
-    if (showNavBarStyleSheet) {
-        NavBarStyleSelectionSheet(
-            currentStyle = navBarStyle,
-            showLabels = navBarShowLabels,
-            cornerRadius = navBarCornerRadius,
-            doubleTapSearch = navBarDoubleTapSearch,
+    if (showStyleSheet && seedColor != null) {
+        PaletteStyleSheet(
+            seedColor = seedColor,
+            isDarkMode = isDarkMode,
+            selectedStyle = uiState.paletteStyle,
             onStyleSelected = {
-                viewModel.onAction(SettingsAction.SetNavBarStyle(it))
+                viewModel.onAction(SettingsAction.SetPaletteStyle(it))
+                showStyleSheet = false
             },
-            onShowLabelsChange = {
-                viewModel.onAction(SettingsAction.SetNavBarShowLabels(it))
-            },
-            onDoubleTapSearchChange = {
-                viewModel.onAction(SettingsAction.SetNavBarDoubleTapSearch(it))
-            },
-            onCornerRadiusChange = {
-                viewModel.onAction(SettingsAction.SetNavBarCornerRadius(it))
-            },
-            onDismiss = { showNavBarStyleSheet = false }
+            onDismiss = { showStyleSheet = false }
         )
     }
 
-    if (showAvatarShapeDialog) {
-        AvatarShapeSelectionSheet(
-            currentShape = avatarShape,
-            frameEnabled = avatarBackgroundEnabled,
-            onShapeSelected = {
-                viewModel.onAction(SettingsAction.SetAvatarShape(it))
-            },
-            onFrameEnabledChange = {
-                viewModel.onAction(SettingsAction.SetAvatarBackgroundEnabled(it))
-            },
-            onDismiss = { showAvatarShapeDialog = false }
-        )
-    }
-
-    SettingsScreenScaffold(
-        title = stringResource(R.string.settings_look_and_feel),
-        onBackClick = onBackClick,
-        modifier = modifier
-    ) {
-        // "Dark mode" opens the Theme subscreen (preview, color scheme, mode, AMOLED, profile
-        // colors) and quick-toggles dark on/off via the trailing switch. App language also opens a
-        // subscreen (chevron). The rest are quick choices that open bottom sheets — no chevron.
+    val pinned: @Composable ColumnScope.() -> Unit = {
+        SettingsSectionLabel(stringResource(R.string.preview))
+        LookAndFeelPreview()
+        SettingsSectionLabel(stringResource(R.string.settings_section_appearance))
         SettingsGroup {
-            SplitToggleSettingsItem(
-                icon = Icons.Default.DarkMode,
-                title = stringResource(R.string.dark_mode),
-                subtitle = when (themeMode) {
-                    ThemeMode.LIGHT -> stringResource(R.string.theme_light)
-                    ThemeMode.DARK -> stringResource(R.string.theme_dark)
-                    ThemeMode.SYSTEM -> stringResource(R.string.theme_system)
-                },
-                checked = isDarkMode,
-                onCheckedChange = { dark ->
-                    viewModel.onAction(
-                        SettingsAction.SetThemeMode(if (dark) ThemeMode.DARK else ThemeMode.LIGHT)
-                    )
-                },
-                onClick = onNavigateToTheme
-            )
-        }
-
-        SettingsGroup {
-            SelectionSettingsItem(
-                icon = Icons.Default.Translate,
-                title = stringResource(R.string.settings_app_language),
-                currentValue = appLocale.displayName,
-                onClick = onNavigateToLanguage,
-                showArrow = true
-            )
-            SelectionSettingsItem(
-                icon = Icons.Default.HighQuality,
-                title = stringResource(R.string.settings_cover_quality),
-                currentValue = coverQualityLabel(coverQuality),
-                onClick = { showCoverQualitySheet = true }
-            )        }
-
-        SettingsGroup {
-            SelectionSettingsItem(
-                icon = Icons.Default.Navigation,
-                title = stringResource(R.string.setting_nav_bar_style),
-                currentValue = navBarStyleLabel(navBarStyle),
-                onClick = { showNavBarStyleSheet = true }
-            )
-            SelectionSettingsItem(
-                icon = Icons.Outlined.Home,
-                title = stringResource(R.string.setting_start_screen),
-                currentValue = startScreenLabel(startScreen),
-                onClick = { showStartScreenSheet = true }
-            )
-            SelectionSettingsItem(
-                icon = Icons.Default.Face,
-                title = stringResource(R.string.setting_avatar_shape),
-                currentValue = avatarShapeLabel(avatarShape),
-                onClick = { showAvatarShapeDialog = true }
-            )
-        }
-
-        SettingsGroup {
-            SelectionSettingsItem(
-                icon = Icons.Default.PlayCircle,
-                title = stringResource(R.string.setting_streaming_service),
-                currentValue = preferredStreamingService.displayName,
-                onClick = { showStreamingServiceSheet = true }
-            )
+            SettingsBlock(modifier = Modifier.selectableGroup()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ThemeMode.entries.forEach { mode ->
+                        ThemeModeTile(
+                            mode = mode,
+                            selected = uiState.themeMode == mode,
+                            onClick = { viewModel.onAction(SettingsAction.SetThemeMode(mode)) }
+                        )
+                    }
+                }
+            }
             SwitchSettingsItem(
-                icon = Icons.Default.Vibration,
-                title = stringResource(R.string.setting_haptic_feedback),
-                checked = hapticEnabled,
-                onCheckedChange = { viewModel.onAction(SettingsAction.SetHapticEnabled(it)) }
-            )
-            // "Show adult content" now lives under Settings ▸ AniList Account, where it follows the
-            // AniList account option by default and can be overridden per device.
-        }
-
-        SettingsGroup {
-            // Privacy: gate the app behind the device's own screen lock (biometric or PIN/pattern/
-            // password). The toggle is refused in the ViewModel when no screen lock is set up.
-            SwitchSettingsItem(
-                icon = Icons.Default.Lock,
-                title = stringResource(R.string.settings_app_lock),
-                subtitle = stringResource(R.string.settings_app_lock_desc),
-                checked = appLockEnabled,
-                onCheckedChange = { viewModel.onAction(SettingsAction.SetAppLockEnabled(it)) }
+                icon = Icons.Default.Contrast,
+                title = stringResource(R.string.setting_pure_black),
+                subtitle = stringResource(R.string.setting_pure_black_desc),
+                checked = uiState.amoledEnabled,
+                onCheckedChange = { viewModel.onAction(SettingsAction.SetAmoledEnabled(it)) }
             )
         }
     }
-}
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun StreamingServiceSelectionSheet(
-    currentService: StreamingService,
-    onServiceSelected: (StreamingService) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val brandColors = rememberBrandColors()
-
-    AppModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        dragHandle = { BottomSheetDefaults.DragHandle() }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 32.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.setting_streaming_service),
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-            )
-
-            Text(
-                text = stringResource(R.string.setting_streaming_service_desc),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 24.dp)
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 100.dp),
-                contentPadding = PaddingValues(horizontal = 24.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.fillMaxWidth()
+    val choices: @Composable ColumnScope.() -> Unit = {
+        SettingsSectionLabel(stringResource(R.string.settings_section_display_size))
+        SettingsGroup {
+            SettingsBlock(
+                modifier = Modifier
+                    .selectableGroup()
+                    .onGloballyPositioned { displaySizeTilesY = it.positionInRoot().y }
             ) {
-                items(StreamingServices) { service ->
-                    val isSelected = currentService == service
-                    val brandColor = brandColors[service]
-
-                    val backgroundColor by animateColorAsState(
-                        targetValue = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                        label = "card_bg"
-                    )
-                    val borderColor by animateColorAsState(
-                        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                        label = "card_border"
-                    )
-
-                    Card(
-                        modifier = Modifier
-                            .height(110.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .clickable { onServiceSelected(service) },
-                        shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = backgroundColor),
-                        border = BorderStroke(2.dp, borderColor)
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxSize().padding(8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            if (service.iconUrl != null) {
-                                AsyncImage(
-                                    model = service.iconUrl,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(36.dp),
-                                    contentScale = ContentScale.Fit,
-                                    colorFilter = brandColor?.let { ColorFilter.tint(it) },
-                                )
-                            } else {
-                                Icon(
-                                    Icons.Default.PlayCircle,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(36.dp),
-                                    tint = brandColor ?: if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DisplaySize.entries.forEach { size ->
+                        DisplaySizeTile(
+                            size = size,
+                            current = uiState.displaySize,
+                            selected = uiState.displaySize == size,
+                            onClick = {
+                                if (size != uiState.displaySize) {
+                                    displaySizeAnchorY = displaySizeTilesY
+                                    viewModel.onAction(SettingsAction.SetDisplaySize(size))
+                                }
                             }
-
-                            Spacer(Modifier.height(12.dp))
-
-                            Text(
-                                text = service.displayName,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                                textAlign = TextAlign.Center
-                            )
-                        }
+                        )
                     }
                 }
             }
         }
-    }
-}
+        Text(
+            text = stringResource(R.string.setting_display_size_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun CoverQualitySelectionSheet(
-    currentQuality: CoverQuality,
-    onQualitySelected: (CoverQuality) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    AppModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        dragHandle = { BottomSheetDefaults.DragHandle() }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 32.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.settings_cover_quality),
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-            )
-
-            Text(
-                text = stringResource(R.string.settings_cover_quality_desc),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 24.dp)
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Central Fixed-Size Preview Image
-            val imageUrl = when (currentQuality) {
-                CoverQuality.MEDIUM -> "https://s4.anilist.co/file/anilistcdn/media/anime/cover/small/bx105333-GybuoSoOZfpH.jpg"
-                CoverQuality.LARGE -> "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx105333-GybuoSoOZfpH.jpg"
-                CoverQuality.EXTRA_LARGE -> "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx105333-GybuoSoOZfpH.jpg"
-            }
-
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                AsyncImage(
-                    model = imageUrl,
-                    contentDescription = stringResource(R.string.cd_cover_quality_preview),
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .height(280.dp)
-                        .width(190.dp)
-                        .clip(RoundedCornerShape(16.dp))
+        SettingsSectionLabel(stringResource(R.string.settings_section_color))
+        SettingsGroup {
+            SettingsBlock(contentPadding = PaddingValues(16.dp)) {
+                ColorSchemeGrid(
+                    palettes = palettes,
+                    selectedPaletteId = selectedPaletteId,
+                    isDarkMode = isDarkMode,
+                    paletteStyle = uiState.paletteStyle,
+                    customSeedColor = customSeedColor,
+                    onPaletteSelected = { viewModel.onAction(SettingsAction.SetSelectedPalette(it.id)) },
+                    onCustomClick = { showColorPicker = true }
                 )
             }
+            SettingsItem(
+                icon = Icons.Default.Palette,
+                title = stringResource(R.string.setting_color_style),
+                subtitle = if (seedColor != null) {
+                    "${uiState.paletteStyle.toDisplayName()} · ${uiState.paletteStyle.toDescription()}"
+                } else {
+                    stringResource(R.string.setting_color_style_dynamic_desc)
+                },
+                enabled = seedColor != null,
+                onClick = { showStyleSheet = true },
+                trailingContent = {
+                    if (seedColor != null) StyleSwatches(seedColor, isDarkMode, uiState.paletteStyle)
+                }
+            )
+        }
+        SettingsGroup {
+            SwitchSettingsItem(
+                title = stringResource(R.string.setting_respect_profile_colors),
+                subtitle = stringResource(R.string.setting_respect_profile_colors_short_desc),
+                checked = uiState.respectUserProfileColors,
+                onCheckedChange = { viewModel.onAction(SettingsAction.SetRespectUserProfileColors(it)) }
+            )
+            SwitchSettingsItem(
+                title = stringResource(R.string.setting_media_artwork_theming),
+                subtitle = stringResource(R.string.setting_media_artwork_theming_short_desc),
+                checked = uiState.mediaArtworkTheming,
+                onCheckedChange = { viewModel.onAction(SettingsAction.SetMediaArtworkTheming(it)) }
+            )
+        }
 
-            Spacer(modifier = Modifier.height(32.dp))
+        SettingsSectionLabel(stringResource(R.string.settings_section_bottom_bar))
+        SettingsGroup {
+            SettingsBlock(modifier = Modifier.selectableGroup()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    NavBarStyle.entries.forEach { style ->
+                        NavBarStyleTile(
+                            style = style,
+                            selected = uiState.navBarStyle == style,
+                            onClick = { viewModel.onAction(SettingsAction.SetNavBarStyle(style)) }
+                        )
+                    }
+                }
+            }
+            SwitchSettingsItem(
+                icon = Icons.AutoMirrored.Filled.Label,
+                title = stringResource(R.string.setting_nav_bar_show_labels),
+                subtitle = stringResource(R.string.setting_nav_bar_show_labels_desc),
+                checked = uiState.navBarShowLabels,
+                onCheckedChange = { viewModel.onAction(SettingsAction.SetNavBarShowLabels(it)) }
+            )
+            NavBarCornerRadiusItem(
+                value = uiState.navBarCornerRadius,
+                onValueChange = { viewModel.onAction(SettingsAction.SetNavBarCornerRadius(it)) }
+            )
+        }
 
-            // Quality Options List
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                CoverQualities.forEach { quality ->
-                    val isSelected = currentQuality == quality
-                    val backgroundColor by animateColorAsState(
-                        targetValue = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                        label = "card_bg"
-                    )
-                    val borderColor by animateColorAsState(
-                        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                        label = "card_border"
-                    )
+        SettingsSectionLabel(stringResource(R.string.settings_section_avatars))
+        SettingsGroup {
+            SettingsBlock(modifier = Modifier.selectableGroup()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    AvatarShape.entries.forEach { shape ->
+                        AvatarShapeTile(
+                            shape = shape,
+                            selected = uiState.avatarShape == shape,
+                            onClick = { viewModel.onAction(SettingsAction.SetAvatarShape(shape)) }
+                        )
+                    }
+                }
+            }
+            SwitchSettingsItem(
+                title = stringResource(R.string.avatar_shape_show_frame),
+                subtitle = stringResource(R.string.avatar_shape_show_frame_desc),
+                checked = uiState.avatarBackgroundEnabled,
+                onCheckedChange = { viewModel.onAction(SettingsAction.SetAvatarBackgroundEnabled(it)) }
+            )
+        }
 
-                    Card(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(64.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable { onQualitySelected(quality) },
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = backgroundColor),
-                        border = BorderStroke(2.dp, borderColor)
-                    ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = coverQualityLabel(quality),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                                textAlign = TextAlign.Center
-                            )
-                        }
+        SettingsSectionLabel(stringResource(R.string.setting_app_icon))
+        SettingsGroup {
+            SettingsBlock(modifier = Modifier.selectableGroup()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AppIcon.entries.forEach { icon ->
+                        AppIconTile(
+                            icon = icon,
+                            selected = appIcon == icon,
+                            onClick = { viewModel.onAction(SettingsAction.SetAppIcon(icon)) }
+                        )
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun rememberBrandColors(): Map<StreamingService, Color?> {
-    return remember {
-        StreamingServices.associateWith { service ->
-            try {
-                Color(android.graphics.Color.parseColor(service.brandColor))
-            } catch (e: Exception) {
-                null
-            }
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------------------
-// Helper Components
-// -----------------------------------------------------------------------------------------
-
-@Composable
-private fun coverQualityLabel(quality: CoverQuality): String = stringResource(
-    when (quality) {
-        CoverQuality.MEDIUM -> R.string.cover_quality_medium
-        CoverQuality.LARGE -> R.string.cover_quality_large
-        CoverQuality.EXTRA_LARGE -> R.string.cover_quality_extra_large
-    }
-)
-
-@Composable
-private fun navBarStyleLabel(style: NavBarStyle): String = stringResource(
-    when (style) {
-        NavBarStyle.ANCHORED -> R.string.setting_nav_bar_style_anchored
-        NavBarStyle.FLOATING -> R.string.setting_nav_bar_style_floating
-    }
-)
-
-@Composable
-private fun NavBarCornerRadiusSlider(
-    value: Float,
-    onValueChange: (Float) -> Unit,
-    modifier: Modifier = Modifier,
-    contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(contentPadding)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.RoundedCorner,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.width(16.dp))
-            Text(
-                text = stringResource(R.string.setting_nav_bar_corner_radius),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = "${value.toInt()}dp",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Slider(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.fillMaxWidth(),
-            valueRange = AppSettings.MIN_NAV_BAR_CORNER_RADIUS..AppSettings.MAX_NAV_BAR_CORNER_RADIUS,
-            colors = SliderDefaults.colors(
-                thumbColor = MaterialTheme.colorScheme.primary,
-                activeTrackColor = MaterialTheme.colorScheme.primary
-            )
+        Text(
+            text = stringResource(R.string.setting_app_icon_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp)
         )
     }
-}
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun NavBarStyleSelectionSheet(
-    currentStyle: NavBarStyle,
-    showLabels: Boolean,
-    cornerRadius: Float,
-    doubleTapSearch: Boolean,
-    onStyleSelected: (NavBarStyle) -> Unit,
-    onShowLabelsChange: (Boolean) -> Unit,
-    onDoubleTapSearchChange: (Boolean) -> Unit,
-    onCornerRadiusChange: (Float) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    AppModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        dragHandle = { BottomSheetDefaults.DragHandle() }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 32.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.nav_bar_style_dialog_title),
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 1. Live Preview Area
-            val shape = if (currentStyle == NavBarStyle.FLOATING) {
-                RoundedCornerShape(cornerRadius.dp)
-            } else {
-                RoundedCornerShape(topStart = cornerRadius.dp, topEnd = cornerRadius.dp, bottomStart = 0.dp, bottomEnd = 0.dp)
-            }
-
-            val padding = if (currentStyle == NavBarStyle.FLOATING) {
-                PaddingValues(horizontal = 16.dp, vertical = 16.dp)
-            } else {
-                PaddingValues(0.dp)
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(140.dp)
-                    .background(MaterialTheme.colorScheme.surfaceContainerLowest),
-                contentAlignment = Alignment.BottomCenter
-            ) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(padding),
-                    shape = shape,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shadowElevation = if (currentStyle == NavBarStyle.FLOATING) 8.dp else 0.dp
+    CollapsingTopBarScaffold(
+        title = stringResource(R.string.settings_look_and_feel),
+        onBackClick = onBackClick,
+        modifier = modifier,
+        scrollableState = listState,
+        enableEnterAnimation = true
+    ) { topContentPadding ->
+        val bottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 32.dp
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            if (maxWidth < TwoColumnMinWidth) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        top = topContentPadding + 8.dp,
+                        start = 16.dp,
+                        end = 16.dp,
+                        bottom = bottomPadding
+                    )
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(if (showLabels) 80.dp else 64.dp)
-                            .padding(horizontal = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        MockNavItem(Icons.Filled.VideoLibrary, "Library", selected = true, showLabel = showLabels, modifier = Modifier.weight(1f))
-                        MockNavItem(Icons.Outlined.Explore, "Discover", selected = false, showLabel = showLabels, modifier = Modifier.weight(1f))
-                        MockNavItem(Icons.Outlined.DynamicFeed, "Feed", selected = false, showLabel = showLabels, modifier = Modifier.weight(1f))
-                        MockNavItem(Icons.Outlined.Forum, "Forum", selected = false, showLabel = showLabels, modifier = Modifier.weight(1f))
-                        MockNavItem(Icons.Outlined.Person, "Profile", selected = false, showLabel = showLabels, modifier = Modifier.weight(1f))
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .adaptiveReadingWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            pinned()
+                            choices()
+                        }
                     }
                 }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // 2. Style Selection Cards
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                NavBarStyles.forEach { style ->
-                    val isSelected = currentStyle == style
-                    val backgroundColor by animateColorAsState(
-                        targetValue = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                        label = "card_bg_color"
-                    )
-                    val borderColor by animateColorAsState(
-                        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                        label = "card_border_color"
-                    )
-
-                    Card(
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally)
+                ) {
+                    Column(
                         modifier = Modifier
                             .weight(1f)
-                            .height(100.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .clickable { onStyleSelected(style) },
-                        shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = backgroundColor),
-                        border = BorderStroke(2.dp, borderColor)
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxSize(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = if (style == NavBarStyle.FLOATING) Icons.Default.RoundedCorner else Icons.Default.Navigation,
-                                contentDescription = null,
-                                tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(32.dp)
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = navBarStyleLabel(style),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // 3. Settings Block (Labels + Corner Radius)
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-            ) {
-                Column {
-                    Row(
+                            .widthIn(max = 480.dp)
+                            .fillMaxHeight()
+                            .verticalScroll(rememberScrollState())
+                            .padding(top = topContentPadding + 8.dp, bottom = bottomPadding),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        content = pinned
+                    )
+                    LazyColumn(
+                        state = listState,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onShowLabelsChange(!showLabels) }
-                            .padding(horizontal = 20.dp, vertical = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                            .weight(1f)
+                            .widthIn(max = 480.dp)
+                            .fillMaxHeight(),
+                        contentPadding = PaddingValues(top = topContentPadding + 8.dp, bottom = bottomPadding)
                     ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Label,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.setting_nav_bar_show_labels),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Text(
-                                text = "Show text labels under icons",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                        item {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp), content = choices)
                         }
-                        Spacer(Modifier.width(16.dp))
-                        Switch(
-                            checked = showLabels,
-                            onCheckedChange = onShowLabelsChange,
-                            colors = appSwitchColors()
-                        )
                     }
-
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 20.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant
-                    )
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onDoubleTapSearchChange(!doubleTapSearch) }
-                            .padding(horizontal = 20.dp, vertical = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.settings_nav_double_tap_search),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Text(
-                                text = stringResource(R.string.settings_nav_double_tap_search_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Spacer(Modifier.width(16.dp))
-                        Switch(
-                            checked = doubleTapSearch,
-                            onCheckedChange = onDoubleTapSearchChange,
-                            colors = appSwitchColors()
-                        )
-                    }
-
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 20.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant
-                    )
-
-                    NavBarCornerRadiusSlider(
-                        value = cornerRadius,
-                        onValueChange = onCornerRadiusChange,
-                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp)
-                    )
                 }
             }
         }
@@ -809,186 +436,290 @@ fun NavBarStyleSelectionSheet(
 }
 
 @Composable
-private fun MockNavItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    selected: Boolean,
-    showLabel: Boolean,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-        modifier = modifier.padding(vertical = 8.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(16.dp))
-                .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
-                .padding(horizontal = 16.dp, vertical = 4.dp)
+private fun RowScope.ThemeModeTile(mode: ThemeMode, selected: Boolean, onClick: () -> Unit) {
+    val (icon, label) = when (mode) {
+        ThemeMode.LIGHT -> Icons.Default.WbSunny to R.string.theme_light
+        ThemeMode.DARK -> Icons.Default.DarkMode to R.string.theme_dark
+        ThemeMode.SYSTEM -> Icons.Default.Smartphone to R.string.theme_system
+    }
+    SettingsChoiceTile(selected = selected, onClick = onClick, modifier = Modifier.weight(1f)) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(vertical = 16.dp)
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(24.dp)
+                tint = if (selected) LocalContentColor.current else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(text = stringResource(label), style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+/**
+ * "Aa" as it will look at [size]. The page is already drawn at [current], so the sample is sized
+ * relative to it and the selected tile always shows text at today's size.
+ */
+@Composable
+private fun RowScope.DisplaySizeTile(
+    size: DisplaySize,
+    current: DisplaySize,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val label = when (size) {
+        DisplaySize.SMALL -> R.string.display_size_small
+        DisplaySize.DEFAULT -> R.string.display_size_default
+        DisplaySize.LARGE -> R.string.display_size_large
+        DisplaySize.LARGER -> R.string.display_size_larger
+    }
+    SettingsChoiceTile(selected = selected, onClick = onClick, modifier = Modifier.weight(1f)) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(vertical = 12.dp)
+        ) {
+            // Fixed height, so the four tiles stay level while their samples differ in size.
+            Box(modifier = Modifier.height(44.dp), contentAlignment = Alignment.Center) {
+                Text(
+                    text = stringResource(R.string.display_size_sample),
+                    style = MaterialTheme.typography.headlineSmall.copy(
+                        fontSize = (24f * size.scale / current.scale).sp
+                    ),
+                    maxLines = 1,
+                    modifier = Modifier.clearAndSetSemantics { }
+                )
+            }
+            Text(
+                text = stringResource(label),
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
-        if (showLabel) {
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium,
-                color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+    }
+}
+
+/** The four colors of the current style, overlapped, as the trailing hint on the Color style row. */
+@Composable
+private fun StyleSwatches(seedColor: Color, isDarkMode: Boolean, style: PaletteStyle) {
+    val scheme = remember(seedColor, isDarkMode, style) {
+        dynamicColorScheme(
+            seedColor = seedColor,
+            isDark = isDarkMode,
+            isAmoled = false,
+            style = style,
+            specVersion = ColorSpec.SpecVersion.SPEC_2026
+        )
+    }
+    val ring = MaterialTheme.colorScheme.surfaceContainer
+    Row(horizontalArrangement = Arrangement.spacedBy((-6).dp)) {
+        listOf(scheme.primary, scheme.secondary, scheme.tertiary, scheme.primaryContainer).forEach { color ->
+            Box(
+                modifier = Modifier
+                    .size(20.dp)
+                    .background(ring, CircleShape)
+                    .padding(2.dp)
+                    .background(color, CircleShape)
             )
         }
     }
 }
 
 @Composable
-private fun avatarShapeLabel(shape: com.anisync.android.data.AvatarShape): String = stringResource(
-    when (shape) {
-        com.anisync.android.data.AvatarShape.CLOVER_8_LEAF -> R.string.avatar_shape_clover
-        com.anisync.android.data.AvatarShape.CIRCLE -> R.string.avatar_shape_circle
-        com.anisync.android.data.AvatarShape.CLOVER_4_LEAF -> R.string.avatar_shape_clover_4_leaf
-        com.anisync.android.data.AvatarShape.GHOSTISH -> R.string.avatar_shape_ghostish
-        com.anisync.android.data.AvatarShape.NONE -> R.string.avatar_shape_none
+private fun RowScope.NavBarStyleTile(style: NavBarStyle, selected: Boolean, onClick: () -> Unit) {
+    val label = when (style) {
+        NavBarStyle.ANCHORED -> R.string.setting_nav_bar_style_anchored
+        NavBarStyle.FLOATING -> R.string.setting_nav_bar_style_floating_short
     }
-)
+    SettingsChoiceTile(selected = selected, onClick = onClick, modifier = Modifier.weight(1f)) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(12.dp)
+        ) {
+            NavBarSketch(style)
+            Text(text = stringResource(label), style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** A screen in miniature: two lines of content and the bar in [style], first tab selected. */
 @Composable
-fun AvatarShapeSelectionSheet(
-    currentShape: com.anisync.android.data.AvatarShape,
-    frameEnabled: Boolean,
-    onShapeSelected: (com.anisync.android.data.AvatarShape) -> Unit,
-    onFrameEnabledChange: (Boolean) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    AppModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        dragHandle = { BottomSheetDefaults.DragHandle() }
+private fun NavBarSketch(style: NavBarStyle) {
+    val colors = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(76.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(colors.surface)
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 32.dp)
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Text(
-                text = stringResource(R.string.avatar_shape_dialog_title),
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 24.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                items(AvatarShapes) { shape ->
-                    val isSelected = currentShape == shape
-                    val backgroundColor by animateColorAsState(
-                        targetValue = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                        label = "card_bg_color"
-                    )
-                    val borderColor by animateColorAsState(
-                        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                        label = "card_border_color"
-                    )
-
-                    Card(
-                        modifier = Modifier
-                            .width(120.dp)
-                            .height(140.dp)
-                            .clip(RoundedCornerShape(24.dp))
-                            .clickable { onShapeSelected(shape) },
-                        shape = RoundedCornerShape(24.dp),
-                        colors = CardDefaults.cardColors(containerColor = backgroundColor),
-                        border = BorderStroke(2.dp, borderColor)
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxSize(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(56.dp)
-                                    .clip(shape.toComposeShape())
-                                    .background(
-                                        if (isSelected) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = avatarShapeLabel(shape),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-            ) {
-                Row(
+            Box(Modifier.fillMaxWidth(0.75f).height(8.dp).background(colors.surfaceContainerHighest, CircleShape))
+            Box(Modifier.fillMaxWidth(0.5f).height(8.dp).background(colors.surfaceContainerHighest, CircleShape))
+        }
+        val barModifier = when (style) {
+            NavBarStyle.ANCHORED -> Modifier
+                .fillMaxWidth()
+                .height(26.dp)
+                .background(colors.surfaceContainerHigh, RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp))
+            NavBarStyle.FLOATING -> Modifier
+                .padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
+                .fillMaxWidth()
+                .height(24.dp)
+                .shadow(3.dp, RoundedCornerShape(12.dp))
+                .background(colors.surfaceContainerHigh, RoundedCornerShape(12.dp))
+        }
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .then(barModifier),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            repeat(5) { index ->
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onFrameEnabledChange(!frameEnabled) }
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(R.string.avatar_shape_show_frame),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
+                        .width(if (index == 0) 20.dp else 8.dp)
+                        .height(8.dp)
+                        .background(
+                            if (index == 0) colors.secondaryContainer
+                            else colors.onSurfaceVariant.copy(alpha = 0.5f),
+                            CircleShape
                         )
-                        Text(
-                            text = stringResource(R.string.avatar_shape_show_frame_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Spacer(Modifier.width(16.dp))
-                    Switch(
-                        checked = frameEnabled,
-                        onCheckedChange = onFrameEnabledChange,
-                        colors = appSwitchColors()
-                    )
-                }
+                )
             }
         }
     }
 }
 
-/** Human label for an [StartScreen] option, shared by the row subtitle and the picker. */
 @Composable
-private fun startScreenLabel(screen: StartScreen): String = stringResource(
-    when (screen) {
-        StartScreen.LAST_VISITED -> R.string.start_screen_last_visited
-        StartScreen.LIBRARY -> R.string.nav_library
-        StartScreen.DISCOVER -> R.string.nav_discover
-        StartScreen.FEED -> R.string.nav_feed
-        StartScreen.FORUM -> R.string.nav_forum
+private fun NavBarCornerRadiusItem(value: Float, onValueChange: (Float) -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.RoundedCorner,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.width(16.dp))
+                Text(
+                    text = stringResource(R.string.setting_nav_bar_corner_radius),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = "${value.toInt()}dp",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Slider(
+                state = rememberControlledSliderState(
+                    value = value,
+                    valueRange = AppSettings.MIN_NAV_BAR_CORNER_RADIUS..AppSettings.MAX_NAV_BAR_CORNER_RADIUS
+                ),
+                onValueChange = onValueChange,
+                modifier = Modifier.fillMaxWidth(),
+                colors = SliderDefaults.colors(
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                    activeTrackColor = MaterialTheme.colorScheme.primary
+                )
+            )
+        }
     }
-)
+}
+
+@Composable
+private fun RowScope.AvatarShapeTile(shape: AvatarShape, selected: Boolean, onClick: () -> Unit) {
+    val label = when (shape) {
+        AvatarShape.CLOVER_8_LEAF -> R.string.avatar_shape_short_clover
+        AvatarShape.CIRCLE -> R.string.avatar_shape_circle
+        AvatarShape.CLOVER_4_LEAF -> R.string.avatar_shape_short_clover_4_leaf
+        AvatarShape.GHOSTISH -> R.string.avatar_shape_short_ghostish
+        AvatarShape.NONE -> R.string.avatar_shape_none
+    }
+    SettingsChoiceTile(
+        selected = selected,
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.weight(1f)
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(vertical = 12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(if (shape == AvatarShape.NONE) RoundedCornerShape(6.dp) else shape.toComposeShape())
+                    .background(
+                        if (selected) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+            )
+            Text(
+                text = stringResource(label),
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun RowScope.AppIconTile(icon: AppIcon, selected: Boolean, onClick: () -> Unit) {
+    SettingsChoiceTile(selected = selected, onClick = onClick, modifier = Modifier.weight(1f)) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(vertical = 12.dp)
+        ) {
+            AppIconPreview(icon = icon, modifier = Modifier.size(48.dp))
+            Text(
+                text = stringResource(icon.label),
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+/**
+ * An adaptive icon drawn from its two layers. The layers are 108dp with the visible area in the
+ * middle 72dp, so they are scaled up by that ratio before the circle crops them, as a launcher does.
+ */
+@Composable
+private fun AppIconPreview(icon: AppIcon, modifier: Modifier = Modifier) {
+    Box(modifier = modifier.clip(CircleShape)) {
+        listOf(icon.background, icon.foreground).forEach { layer ->
+            Image(
+                painter = painterResource(layer),
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = ADAPTIVE_ICON_SCALE
+                        scaleY = ADAPTIVE_ICON_SCALE
+                    }
+            )
+        }
+    }
+}
+
+private const val ADAPTIVE_ICON_SCALE = 108f / 72f

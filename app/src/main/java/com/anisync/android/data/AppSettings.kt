@@ -16,6 +16,7 @@ import com.anisync.android.domain.FeedScope
 import com.anisync.android.domain.ScoreFormat
 import com.anisync.android.domain.media.MediaHost
 import com.anisync.android.type.MediaType
+import com.anisync.android.ui.theme.AppPaletteStyles
 import com.anisync.android.ui.theme.FontAxisOverrides
 import com.anisync.android.ui.theme.TypeCategory
 import com.anisync.android.ui.theme.TypographyOverrides
@@ -177,6 +178,13 @@ class AppSettings @Inject constructor(
     private val _amoledEnabled = MutableStateFlow(prefs.getBoolean(KEY_AMOLED_ENABLED, false))
     val amoledEnabled: StateFlow<Boolean> = _amoledEnabled.asStateFlow()
 
+    // Display size, multiplied into the density the whole app composes with. Device-local.
+    private val _displaySize = MutableStateFlow(
+        runCatching { DisplaySize.valueOf(prefs.getString(KEY_DISPLAY_SIZE, null) ?: DisplaySize.DEFAULT.name) }
+            .getOrDefault(DisplaySize.DEFAULT)
+    )
+    val displaySize: StateFlow<DisplaySize> = _displaySize.asStateFlow()
+
     // Avatar shape setting
     private val _avatarShape = MutableStateFlow(readAvatarShape())
     val avatarShape: StateFlow<AvatarShape> = _avatarShape.asStateFlow()
@@ -211,6 +219,11 @@ class AppSettings @Inject constructor(
     // Haptic feedback setting
     private val _hapticEnabled = MutableStateFlow(prefs.getBoolean(KEY_HAPTIC_ENABLED, true))
     val hapticEnabled: StateFlow<Boolean> = _hapticEnabled.asStateFlow()
+
+    // Offer the score sheet when a quick action finishes a title that has no score yet. Default on,
+    // since asking at the moment the title ends is the point of it.
+    private val _scoreOnComplete = MutableStateFlow(prefs.getBoolean(KEY_SCORE_ON_COMPLETE, true))
+    val scoreOnComplete: StateFlow<Boolean> = _scoreOnComplete.asStateFlow()
 
     // App lock: require the device screen lock (biometric or PIN/pattern/password) to open the app.
     // Device-local privacy toggle; default off.
@@ -321,7 +334,7 @@ class AppSettings @Inject constructor(
     
     // Palette style for color generation
     private val _paletteStyle = MutableStateFlow(
-        PaletteStyle.entries.getOrElse(prefs.getInt(KEY_PALETTE_STYLE, 0)) { PaletteStyle.TonalSpot }
+        AppPaletteStyles.getOrElse(prefs.getInt(KEY_PALETTE_STYLE, 0)) { PaletteStyle.TonalSpot }
     )
     val paletteStyle: StateFlow<PaletteStyle> = _paletteStyle.asStateFlow()
 
@@ -774,6 +787,9 @@ class AppSettings @Inject constructor(
         prefs.edit().putInt(KEY_LAST_SEEN_VERSION_CODE, BuildConfig.VERSION_CODE).apply()
     }
 
+    /** The newest build the support prompt has recorded, or 0 if it never ran. */
+    fun lastSeenVersionCode(): Int = prefs.getInt(KEY_LAST_SEEN_VERSION_CODE, 0)
+
     /** Raises the card over the running app without an update behind it (Developer Tools). */
     fun showSupportPrompt() {
         _supportPromptVisible.value = true
@@ -794,6 +810,11 @@ class AppSettings @Inject constructor(
     fun setAmoledEnabled(enabled: Boolean) {
         _amoledEnabled.value = enabled
         prefs.edit().putBoolean(KEY_AMOLED_ENABLED, enabled).apply()
+    }
+
+    fun setDisplaySize(size: DisplaySize) {
+        _displaySize.value = size
+        prefs.edit().putString(KEY_DISPLAY_SIZE, size.name).apply()
     }
 
     fun setAvatarShape(shape: AvatarShape) {
@@ -827,6 +848,11 @@ class AppSettings @Inject constructor(
     fun setHapticEnabled(enabled: Boolean) {
         _hapticEnabled.value = enabled
         prefs.edit().putBoolean(KEY_HAPTIC_ENABLED, enabled).apply()
+    }
+
+    fun setScoreOnComplete(enabled: Boolean) {
+        _scoreOnComplete.value = enabled
+        prefs.edit().putBoolean(KEY_SCORE_ON_COMPLETE, enabled).apply()
     }
 
     /** Enable or disable the app lock (device screen-lock gate). */
@@ -946,7 +972,7 @@ class AppSettings @Inject constructor(
      */
     fun setPaletteStyle(style: PaletteStyle) {
         _paletteStyle.value = style
-        prefs.edit().putInt(KEY_PALETTE_STYLE, style.ordinal).apply()
+        prefs.edit().putInt(KEY_PALETTE_STYLE, AppPaletteStyles.indexOf(style)).apply()
     }
 
     /**
@@ -1341,7 +1367,9 @@ companion object {
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_AMOLED_ENABLED = "amoled_enabled"
         private const val KEY_AVATAR_SHAPE = "avatar_shape"
+        private const val KEY_DISPLAY_SIZE = "display_size"
         private const val KEY_HAPTIC_ENABLED = "haptic_enabled"
+        private const val KEY_SCORE_ON_COMPLETE = "score_on_complete"
         private const val KEY_APP_LOCK_ENABLED = "app_lock_enabled"
         private const val KEY_NAV_BAR_STYLE = "nav_bar_style"
         private const val KEY_NAV_BAR_LABELS = "nav_bar_show_labels"

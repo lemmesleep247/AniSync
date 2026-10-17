@@ -115,6 +115,15 @@ object PresetPalettes {
 }
 
 /**
+ * The styles the app offers, in the order the palette preference stores them by index. That order
+ * is the 5.x enum order, so saved choices keep reading back after MaterialKolor 6 dropped the enum.
+ * New styles go on the end. CMF is appended explicitly so its index cannot move if MaterialKolor
+ * reorders [PaletteStyle.KnownStyles].
+ */
+val AppPaletteStyles: List<PaletteStyle> =
+    PaletteStyle.KnownStyles.filterNot { it is PaletteStyle.Cmf } + PaletteStyle.Cmf()
+
+/**
  * Extension to map PaletteStyle enum to user-friendly labels.
  */
 fun PaletteStyle.toDisplayName(): String = when (this) {
@@ -127,6 +136,7 @@ fun PaletteStyle.toDisplayName(): String = when (this) {
     PaletteStyle.Monochrome -> "Monochrome"
     PaletteStyle.Fidelity -> "Fidelity"
     PaletteStyle.Content -> "Content"
+    is PaletteStyle.Cmf -> "CMF"
 }
 
 /**
@@ -135,11 +145,12 @@ fun PaletteStyle.toDisplayName(): String = when (this) {
 fun PaletteStyle.toDescription(): String = when (this) {
     PaletteStyle.TonalSpot -> "Calm, balanced colors"
     PaletteStyle.Neutral -> "Subtle, grayscale-leaning"
-    PaletteStyle.Vibrant -> "Bold, maximum colorfulness"
+    PaletteStyle.Vibrant -> "Bold, most colorful"
     PaletteStyle.Expressive -> "Playful, diverse hues"
     PaletteStyle.Rainbow -> "Varied hue spectrum"
     PaletteStyle.FruitSalad -> "Colorful, lively mix"
     PaletteStyle.Monochrome -> "Pure black, white, gray"
     PaletteStyle.Fidelity -> "Preserves source color"
     PaletteStyle.Content -> "Analogous color harmony"
+    is PaletteStyle.Cmf -> "One hue, tinted surfaces"
 }

@@ -1,9 +1,11 @@
 package com.anisync.android.presentation.settings
 
 import androidx.compose.ui.graphics.Color
+import com.anisync.android.data.AppIcon
 import com.anisync.android.data.AppLocale
 import com.anisync.android.data.AvatarShape
 import com.anisync.android.data.CoverQuality
+import com.anisync.android.data.DisplaySize
 import com.anisync.android.data.NavBarStyle
 import com.anisync.android.data.StartScreen
 import com.anisync.android.data.StreamingService
@@ -18,12 +20,15 @@ import com.materialkolor.PaletteStyle
 sealed interface SettingsAction {
     data class SetThemeMode(val mode: ThemeMode) : SettingsAction
     data class SetAmoledEnabled(val enabled: Boolean) : SettingsAction
+    data class SetDisplaySize(val size: DisplaySize) : SettingsAction
     data class SetTitleLanguage(val language: TitleLanguage) : SettingsAction
     data class SetCoverQuality(val quality: CoverQuality) : SettingsAction
     data class SetHapticEnabled(val enabled: Boolean) : SettingsAction
+    data class SetScoreOnComplete(val enabled: Boolean) : SettingsAction
     data class SetAppLockEnabled(val enabled: Boolean) : SettingsAction
     data class SetNavBarStyle(val style: NavBarStyle) : SettingsAction
     data class SetStartScreen(val screen: StartScreen) : SettingsAction
+    data class SetAppIcon(val icon: AppIcon) : SettingsAction
     data class SetNavBarShowLabels(val show: Boolean) : SettingsAction
     data class SetNavBarDoubleTapSearch(val enabled: Boolean) : SettingsAction
     data class SetNavBarCornerRadius(val radius: Float) : SettingsAction
@@ -121,9 +126,11 @@ data class SettingsUiState(
     // Look & Feel
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val amoledEnabled: Boolean = false,
+    val displaySize: DisplaySize = DisplaySize.DEFAULT,
     val titleLanguage: TitleLanguage = TitleLanguage.ROMAJI,
     val coverQuality: CoverQuality = CoverQuality.LARGE,
     val hapticEnabled: Boolean = true,
+    val scoreOnComplete: Boolean = true,
     val appLockEnabled: Boolean = false,
     val navBarStyle: NavBarStyle = NavBarStyle.ANCHORED,
     val navBarShowLabels: Boolean = true,

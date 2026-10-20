@@ -117,11 +117,13 @@ data class SectionGrid(
  * Grid screen for displaying all related media.
  * @param mediaId The ID of the media
  * @param mediaTitle The title of the media (for display in app bar)
+ * @param coverColor The title's cover color, so the grid keeps its palette
  */
 @Serializable
 data class MediaRelationsGrid(
     val mediaId: Int,
-    val mediaTitle: String
+    val mediaTitle: String,
+    val coverColor: String? = null
 )
 
 /**
@@ -140,24 +142,28 @@ data class CharacterMediaGrid(
  * media details page.
  * @param mediaId The ID of the media
  * @param mediaTitle The title of the media (for display under the app bar)
+ * @param coverColor The title's cover color, so the list keeps its palette
  */
 @Serializable
 data class MediaThemes(
     val mediaId: Int,
     val mediaTitle: String,
     val totalEpisodes: Int? = null,
-    val coverUrl: String? = null
+    val coverUrl: String? = null,
+    val coverColor: String? = null
 )
 
 /**
  * Grid screen for displaying all recommendations for a media.
  * @param mediaId The ID of the media
  * @param mediaTitle The title of the media (for display in app bar)
+ * @param coverColor The title's cover color, so the grid keeps its palette
  */
 @Serializable
 data class MediaRecommendationsGrid(
     val mediaId: Int,
-    val mediaTitle: String
+    val mediaTitle: String,
+    val coverColor: String? = null
 )
 
 /**
@@ -194,12 +200,16 @@ data class ForumCategoryBrowse(
  * Thread detail screen — shows the full thread body and comments.
  * @param threadId The AniList Thread ID
  * @param threadTitle The thread title (for immediate display before data loads)
+ * @param coverColor Cover color of the title the thread was opened from, so it keeps that palette
+ * @param profileColor Profile color of the user whose profile opened the thread, for the same reason
  */
 @Serializable
 data class ForumThreadDetail(
     val threadId: Int,
     val threadTitle: String = "",
-    val commentId: Int = 0
+    val commentId: Int = 0,
+    val coverColor: String? = null,
+    val profileColor: String? = null
 )
 
 /**
@@ -207,9 +217,15 @@ data class ForumThreadDetail(
  * destination (not an inline overlay) so authoring is never confined to a list-detail pane on large
  * screens. Title and categories are preserved; only the body is editable here.
  * @param threadId The AniList thread id being edited
+ * @param coverColor Cover color of the title the thread was opened from, so it keeps that palette
+ * @param profileColor Profile color of the user whose profile opened the thread
  */
 @Serializable
-data class EditThreadBody(val threadId: Int)
+data class EditThreadBody(
+    val threadId: Int,
+    val coverColor: String? = null,
+    val profileColor: String? = null
+)
 
 /**
  * Create new thread screen.
@@ -223,12 +239,14 @@ data class EditThreadBody(val threadId: Int)
  * @param mediaId AniList media id to pre-attach, or 0 for none
  * @param mediaTitle Display title for the pre-attached media chip
  * @param mediaCoverUrl Cover image URL for the pre-attached media chip
+ * @param coverColor Cover color of the pre-attached media, so the composer keeps its palette
  */
 @Serializable
 data class CreateThread(
     val mediaId: Int = 0,
     val mediaTitle: String = "",
-    val mediaCoverUrl: String = ""
+    val mediaCoverUrl: String = "",
+    val coverColor: String? = null
 )
 
 /**
@@ -236,11 +254,13 @@ data class CreateThread(
  * Reached from the media detail "Discussions" section ("View all").
  * @param mediaId The AniList media id
  * @param mediaTitle Display title for the app bar
+ * @param coverColor The title's cover color, so the list and the threads it opens keep its palette
  */
 @Serializable
 data class ForumMediaThreads(
     val mediaId: Int,
-    val mediaTitle: String = ""
+    val mediaTitle: String = "",
+    val coverColor: String? = null
 )
 
 // =============================================================================
@@ -252,9 +272,15 @@ data class ForumMediaThreads(
  *
  * @param sourceScreen The screen that initiated navigation ("discover", "recent_reviews", …).
  *                     Used to match shared element keys; deep links keep the default.
+ * @param coverColor Cover color of the reviewed title when its page opened the review, so the
+ *                   first frame already wears its palette.
  */
 @Serializable
-data class ReviewDetail(val reviewId: Int, val sourceScreen: String = "link")
+data class ReviewDetail(
+    val reviewId: Int,
+    val sourceScreen: String = "link",
+    val coverColor: String? = null
+)
 
 /**
  * Recent reviews list — AniList's newest reviews, filterable by media type.
@@ -268,21 +294,28 @@ data class RecentReviews(val mediaType: String = "ANIME")
  * Review editor — write a new review or edit the viewer's existing one for a media.
  * @param mediaId The media being reviewed
  * @param mediaTitle The media title (for display in app bar)
+ * @param coverColor The title's cover color, so the editor keeps its palette
  */
 @Serializable
 data class WriteReview(
     val mediaId: Int,
-    val mediaTitle: String = ""
+    val mediaTitle: String = "",
+    val coverColor: String? = null
 )
 
 // =============================================================================
 // ACTIVITY ROUTES
 // =============================================================================
 
+/**
+ * A single activity and its replies.
+ * @param profileColor Profile color of the user whose profile opened it, so it keeps that palette
+ */
 @Serializable
 data class ActivityDetail(
     val activityId: Int,
-    val targetReplyId: Int = 0
+    val targetReplyId: Int = 0,
+    val profileColor: String? = null
 )
 
 /**
@@ -290,9 +323,13 @@ data class ActivityDetail(
  * destination (not an inline overlay) so authoring is never confined to a list-detail pane on large
  * screens.
  * @param activityId The AniList activity id being edited
+ * @param profileColor Profile color of the user whose profile opened the activity
  */
 @Serializable
-data class EditActivity(val activityId: Int)
+data class EditActivity(
+    val activityId: Int,
+    val profileColor: String? = null
+)
 
 /**
  * New-status composer — posts a new text activity to the viewer's feed. A real full-screen

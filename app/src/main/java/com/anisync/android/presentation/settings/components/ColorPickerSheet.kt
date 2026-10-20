@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -28,6 +29,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -48,12 +50,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.anisync.android.R
 import com.anisync.android.presentation.components.AppModalBottomSheet
 import com.anisync.android.presentation.components.rememberControlledSliderState
+import com.anisync.android.ui.theme.paletteRoles
 import com.materialkolor.PaletteStyle
-import com.materialkolor.dynamiccolor.ColorSpec
-import com.materialkolor.material3.dynamicColorScheme
 import kotlinx.coroutines.launch
 
 /**
@@ -228,13 +230,16 @@ fun ColorPickerSheet(
 /** The seed beside four of the roles generated from it, on the surface they would sit on. */
 @Composable
 private fun GeneratedRoles(seed: Color, isDarkMode: Boolean, paletteStyle: PaletteStyle) {
-    val scheme = remember(seed, isDarkMode, paletteStyle) {
-        dynamicColorScheme(
-            seedColor = seed,
-            isDark = isDarkMode,
-            isAmoled = false,
-            style = paletteStyle,
-            specVersion = ColorSpec.SpecVersion.SPEC_2026
+    val colors = remember(seed, isDarkMode, paletteStyle) {
+        val roles = paletteRoles(seed, isDarkMode, paletteStyle)
+        GeneratedRoleColors(
+            surfaceContainer = roles.surfaceContainer(),
+            surfaceContainerHigh = roles.surfaceContainerHigh(),
+            primary = roles.primary(),
+            primaryContainer = roles.primaryContainer(),
+            tertiary = roles.tertiary(),
+            outlineVariant = roles.outlineVariant(),
+            onSurfaceVariant = roles.onSurfaceVariant()
         )
     }
     Row(
@@ -243,21 +248,21 @@ private fun GeneratedRoles(seed: Color, isDarkMode: Boolean, paletteStyle: Palet
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(scheme.surfaceContainer)
+            .background(colors.surfaceContainer)
             .padding(16.dp)
     ) {
         Box(
             modifier = Modifier
-                .size(64.dp)
+                .size(48.dp)
                 .clip(CircleShape)
                 .background(seed)
         )
         Row(modifier = Modifier.weight(1f)) {
             listOf(
-                R.string.color_role_primary to scheme.primary,
-                R.string.color_role_container to scheme.primaryContainer,
-                R.string.color_role_tertiary to scheme.tertiary,
-                R.string.color_role_surface to scheme.surfaceContainerHigh,
+                R.string.color_role_primary to colors.primary,
+                R.string.color_role_container to colors.primaryContainer,
+                R.string.color_role_tertiary to colors.tertiary,
+                R.string.color_role_surface to colors.surfaceContainerHigh,
             ).forEach { (label, color) ->
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -269,19 +274,35 @@ private fun GeneratedRoles(seed: Color, isDarkMode: Boolean, paletteStyle: Palet
                             .size(36.dp)
                             .clip(CircleShape)
                             .background(color)
-                            .border(1.dp, scheme.outlineVariant, CircleShape)
+                            .border(1.dp, colors.outlineVariant, CircleShape)
                     )
                     Text(
                         text = stringResource(label),
                         style = MaterialTheme.typography.labelSmall,
-                        color = scheme.onSurfaceVariant,
-                        maxLines = 1
+                        color = colors.onSurfaceVariant,
+                        // A quarter of the row can be narrower than the word, so it shrinks rather than breaks.
+                        maxLines = 1,
+                        autoSize = TextAutoSize.StepBased(
+                            minFontSize = 8.sp,
+                            maxFontSize = MaterialTheme.typography.labelSmall.fontSize
+                        )
                     )
                 }
             }
         }
     }
 }
+
+@Immutable
+private data class GeneratedRoleColors(
+    val surfaceContainer: Color,
+    val surfaceContainerHigh: Color,
+    val primary: Color,
+    val primaryContainer: Color,
+    val tertiary: Color,
+    val outlineVariant: Color,
+    val onSurfaceVariant: Color
+)
 
 private fun Color.toHex(): String = "#%06X".format(toArgb() and 0xFFFFFF)
 

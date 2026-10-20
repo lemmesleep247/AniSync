@@ -16,7 +16,7 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.PersonAddAlt
-import androidx.compose.material3.AlertDialog
+import com.anisync.android.presentation.components.AppAlertDialog
 import com.anisync.android.presentation.components.AppCircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -45,6 +45,7 @@ import com.anisync.android.R
 import com.anisync.android.data.account.Account
 import com.anisync.android.presentation.components.UserAvatar
 import com.anisync.android.presentation.login.AniListAuth
+import com.anisync.android.ui.theme.ProvideDisplaySize
 import com.anisync.android.util.AppLinksUtil
 
 /**
@@ -73,7 +74,7 @@ fun AniListSettingsScreen(
     }
 
     if (showLogoutDialog) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { showLogoutDialog = false },
             title = { Text(stringResource(R.string.logout_dialog_title)) },
             text = { Text(stringResource(R.string.logout_dialog_message)) },
@@ -99,7 +100,7 @@ fun AniListSettingsScreen(
     }
 
     accountToRemove?.let { target ->
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { accountToRemove = null },
             title = { Text(stringResource(R.string.account_remove_dialog_title)) },
             text = {
@@ -265,35 +266,37 @@ private fun AccountRow(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false }
                     ) {
-                        if (account.isExpired) {
+                        ProvideDisplaySize {
+                            if (account.isExpired) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.account_reauthenticate)) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onReauthenticate()
+                                    }
+                                )
+                            } else {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.account_switch)) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onSwitch()
+                                    }
+                                )
+                            }
                             DropdownMenuItem(
-                                text = { Text(stringResource(R.string.account_reauthenticate)) },
+                                text = {
+                                    Text(
+                                        stringResource(R.string.account_remove),
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                },
                                 onClick = {
                                     menuExpanded = false
-                                    onReauthenticate()
-                                }
-                            )
-                        } else {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.account_switch)) },
-                                onClick = {
-                                    menuExpanded = false
-                                    onSwitch()
+                                    onRemove()
                                 }
                             )
                         }
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    stringResource(R.string.account_remove),
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            },
-                            onClick = {
-                                menuExpanded = false
-                                onRemove()
-                            }
-                        )
                     }
                 }
             }

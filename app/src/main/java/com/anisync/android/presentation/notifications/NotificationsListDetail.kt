@@ -51,6 +51,7 @@ import com.anisync.android.presentation.navigation.MediaDetails
 import com.anisync.android.presentation.navigation.MediaRecommendationsGrid
 import com.anisync.android.presentation.navigation.MediaRelationsGrid
 import com.anisync.android.presentation.navigation.MediaThemes
+import com.anisync.android.presentation.navigation.ReviewDetail
 import com.anisync.android.presentation.navigation.StaffDetails
 import com.anisync.android.presentation.navigation.StudioDetails
 import com.anisync.android.presentation.navigation.TwoPaneListDetailScaffold
@@ -227,18 +228,31 @@ private fun NotificationDetailPane(
                     onCharacterClick = { navController.navigate(CharacterDetails(it)) },
                     onStaffClick = { navController.navigate(StaffDetails(it)) },
                     onStudioClick = { navController.navigate(StudioDetails(it)) },
-                    onRelatedSeeAllClick = { mId, t -> navController.navigate(MediaRelationsGrid(mId, t)) },
-                    onRecommendationsSeeAllClick = { mId, t ->
-                        navController.navigate(MediaRecommendationsGrid(mId, t))
+                    onRelatedSeeAllClick = { mId, t, color ->
+                        navController.navigate(MediaRelationsGrid(mId, t, color))
                     },
-                    onThemesSeeAllClick = { mId, t, episodes, cover ->
-                        navController.navigate(MediaThemes(mId, t, episodes, cover))
+                    onRecommendationsSeeAllClick = { mId, t, color ->
+                        navController.navigate(MediaRecommendationsGrid(mId, t, color))
                     },
-                    onWriteReviewClick = { mId, t -> navController.navigate(WriteReview(mId, t)) },
-                    onDiscussionClick = { tId, tt -> navController.navigate(ForumThreadDetail(tId, tt)) },
-                    onViewAllDiscussions = { mId, t -> navController.navigate(ForumMediaThreads(mId, t)) },
-                    onStartDiscussion = { mId, t, cover ->
-                        navController.navigate(CreateThread(mId, t, cover.orEmpty()))
+                    onThemesSeeAllClick = { mId, t, episodes, cover, color ->
+                        navController.navigate(MediaThemes(mId, t, episodes, cover, color))
+                    },
+                    onWriteReviewClick = { mId, t, color ->
+                        navController.navigate(WriteReview(mId, t, color))
+                    },
+                    onReviewClick = { rId, color ->
+                        navController.navigate(
+                            ReviewDetail(rId, sourceScreen = "media_details", coverColor = color)
+                        )
+                    },
+                    onDiscussionClick = { tId, tt, color ->
+                        navController.navigate(ForumThreadDetail(tId, tt, coverColor = color))
+                    },
+                    onViewAllDiscussions = { mId, t, color ->
+                        navController.navigate(ForumMediaThreads(mId, t, color))
+                    },
+                    onStartDiscussion = { mId, t, cover, color ->
+                        navController.navigate(CreateThread(mId, t, cover.orEmpty(), color))
                     },
                     onUserClick = navigateUser,
                     sharedTransitionScope = this@SharedTransitionLayout,
@@ -280,13 +294,17 @@ private fun NotificationDetailPane(
                         onVoiceActorClick = { navController.navigate(StaffDetails(it)) },
                         onStudioClick = { navController.navigate(StudioDetails(it)) },
                         onUserClick = navigateUser,
-                        onThreadClick = { tId, tt -> navController.navigate(ForumThreadDetail(tId, tt)) },
-                        onCommentClick = { tId, cId, tt ->
-                            navController.navigate(ForumThreadDetail(tId, tt, cId))
+                        onThreadClick = { tId, tt, color ->
+                            navController.navigate(ForumThreadDetail(tId, tt, profileColor = color))
                         },
-                        onActivityClick = { navController.navigate(ActivityDetail(it)) },
-                        onLastReplyClick = { aId, rId ->
-                            navController.navigate(ActivityDetail(aId, rId))
+                        onCommentClick = { tId, cId, tt, color ->
+                            navController.navigate(ForumThreadDetail(tId, tt, cId, profileColor = color))
+                        },
+                        onActivityClick = { aId, color ->
+                            navController.navigate(ActivityDetail(aId, profileColor = color))
+                        },
+                        onLastReplyClick = { aId, rId, color ->
+                            navController.navigate(ActivityDetail(aId, rId, color))
                         },
                         onLogoutClick = { },
                         isOwnProfile = false,

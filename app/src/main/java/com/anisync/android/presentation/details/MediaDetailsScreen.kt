@@ -133,6 +133,7 @@ import com.anisync.android.presentation.components.alert.rememberRateLimitedRefr
 import com.anisync.android.presentation.components.SegmentedTabGroup
 import com.anisync.android.presentation.components.HeaderLevel
 import com.anisync.android.presentation.components.ImageViewerDialog
+import com.anisync.android.presentation.components.MediaArtworkThemeOverride
 import com.anisync.android.presentation.components.ReviewCard
 import com.anisync.android.presentation.components.SectionHeader
 import com.anisync.android.presentation.components.UserAvatar
@@ -159,7 +160,6 @@ import com.anisync.android.presentation.details.components.StaffItem
 import com.anisync.android.presentation.details.components.mediaStatsTabContent
 import com.anisync.android.presentation.library.components.ScoreOnCompleteSheet
 import com.anisync.android.presentation.util.AppMotion
-import com.anisync.android.presentation.util.LocalAppSettings
 import com.anisync.android.presentation.util.LocalPaneIsRoot
 import com.anisync.android.presentation.util.TransitionKeys
 import com.anisync.android.presentation.util.copyOnLongPress
@@ -171,9 +171,6 @@ import com.anisync.android.presentation.share.MediaShareCard
 import com.anisync.android.presentation.share.ShareCardTemplate
 import com.anisync.android.presentation.share.ShareImageSheet
 import com.anisync.android.presentation.share.parseCoverColor
-import com.anisync.android.ui.theme.mediaArtworkColorScheme
-import com.anisync.android.ui.theme.mediaArtworkSeedColor
-import com.anisync.android.ui.theme.resolveDarkTheme
 import com.anisync.android.util.AniListUrls
 import com.anisync.android.util.getTitle
 
@@ -192,14 +189,20 @@ fun MediaDetailsScreen(
     onCharacterClick: (Int) -> Unit = {},
     onStaffClick: (Int) -> Unit = {},
     onStudioClick: (Int) -> Unit = {},
-    onRelatedSeeAllClick: (Int, String) -> Unit = { _, _ -> },
-    onRecommendationsSeeAllClick: (Int, String) -> Unit = { _, _ -> },
-    onThemesSeeAllClick: (mediaId: Int, mediaTitle: String, totalEpisodes: Int?, coverUrl: String?) -> Unit = { _, _, _, _ -> },
-    onWriteReviewClick: (Int, String) -> Unit = { _, _ -> },
-    onReviewClick: (Int) -> Unit = {},
-    onDiscussionClick: (threadId: Int, threadTitle: String) -> Unit = { _, _ -> },
-    onViewAllDiscussions: (mediaId: Int, mediaTitle: String) -> Unit = { _, _ -> },
-    onStartDiscussion: (mediaId: Int, title: String, coverUrl: String?) -> Unit = { _, _, _ -> },
+    onRelatedSeeAllClick: (mediaId: Int, mediaTitle: String, coverColor: String?) -> Unit,
+    onRecommendationsSeeAllClick: (mediaId: Int, mediaTitle: String, coverColor: String?) -> Unit,
+    onThemesSeeAllClick: (
+        mediaId: Int,
+        mediaTitle: String,
+        totalEpisodes: Int?,
+        coverUrl: String?,
+        coverColor: String?,
+    ) -> Unit,
+    onWriteReviewClick: (mediaId: Int, mediaTitle: String, coverColor: String?) -> Unit,
+    onReviewClick: (reviewId: Int, coverColor: String?) -> Unit,
+    onDiscussionClick: (threadId: Int, threadTitle: String, coverColor: String?) -> Unit,
+    onViewAllDiscussions: (mediaId: Int, mediaTitle: String, coverColor: String?) -> Unit,
+    onStartDiscussion: (mediaId: Int, title: String, coverUrl: String?, coverColor: String?) -> Unit,
     onUserClick: (String) -> Unit = {},
     navigationIcon: ImageVector = Icons.AutoMirrored.Filled.ArrowBack,
     viewModel: MediaDetailsViewModel = hiltViewModel(),
@@ -236,10 +239,8 @@ fun MediaDetailsScreen(
     var showShareImageSheet by rememberSaveable { mutableStateOf(false) }
     val listState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
     // Hoisted to the screen (alongside listState) so the selected tab survives a character/staff
-    // round-trip. When the details content flashes through Loading on re-entry (the cached flow
-    // resets after the screen is off-stage a few seconds), the Success subtree is torn down and
-    // rebuilt; state kept inside it would reset to OVERVIEW, dropping the viewer back to the first
-    // tab. Living here — the same level scroll already does — keeps it stable across that rebuild.
+    // round-trip and anything that rebuilds the Success subtree, which would reset state kept inside
+    // it to OVERVIEW.
     var selectedTab by rememberSaveable { mutableStateOf(DetailsTab.OVERVIEW) }
 
     var shouldKeepChromeOverlayForReturn by rememberSaveable { mutableStateOf(false) }
@@ -551,7 +552,8 @@ fun MediaDetailsScreen(
                                         hasObservedDetailsReEnter = false
                                         onRelatedSeeAllClick(
                                             state.details.id,
-                                            state.details.getTitle(titleLanguage)
+                                            state.details.getTitle(titleLanguage),
+                                            state.details.coverColor
                                         )
                                     },
                                     onRecommendationsSeeAllClick = {
@@ -559,7 +561,8 @@ fun MediaDetailsScreen(
                                         hasObservedDetailsReEnter = false
                                         onRecommendationsSeeAllClick(
                                             state.details.id,
-                                            state.details.getTitle(titleLanguage)
+                                            state.details.getTitle(titleLanguage),
+                                            state.details.coverColor
                                         )
                                     },
                                     onThemesSeeAllClick = {
@@ -569,7 +572,8 @@ fun MediaDetailsScreen(
                                             state.details.id,
                                             state.details.getTitle(titleLanguage),
                                             state.details.coverageEpisodeCount,
-                                            state.details.bannerUrl ?: state.details.coverUrl
+                                            state.details.bannerUrl ?: state.details.coverUrl,
+                                            state.details.coverColor
                                         )
                                     },
                                     themesState = themesState,
@@ -577,34 +581,37 @@ fun MediaDetailsScreen(
                                     onWriteReviewClick = {
                                         onWriteReviewClick(
                                             state.details.id,
-                                            state.details.getTitle(titleLanguage)
+                                            state.details.getTitle(titleLanguage),
+                                            state.details.coverColor
                                         )
                                     },
                                     onReviewClick = { reviewId ->
                                         shouldKeepChromeOverlayForReturn = true
                                         hasObservedDetailsReEnter = false
-                                        onReviewClick(reviewId)
+                                        onReviewClick(reviewId, state.details.coverColor)
                                     },
                                     onEditNotes = viewModel::openEditSheet,
                                     discussions = discussions,
                                     onDiscussionClick = { threadId, threadTitle ->
                                         shouldKeepChromeOverlayForReturn = true
                                         hasObservedDetailsReEnter = false
-                                        onDiscussionClick(threadId, threadTitle)
+                                        onDiscussionClick(threadId, threadTitle, state.details.coverColor)
                                     },
                                     onViewAllDiscussions = {
                                         shouldKeepChromeOverlayForReturn = true
                                         hasObservedDetailsReEnter = false
                                         onViewAllDiscussions(
                                             state.details.id,
-                                            state.details.getTitle(titleLanguage)
+                                            state.details.getTitle(titleLanguage),
+                                            state.details.coverColor
                                         )
                                     },
                                     onStartDiscussion = {
                                         onStartDiscussion(
                                             state.details.id,
                                             state.details.getTitle(titleLanguage),
-                                            state.details.coverUrl
+                                            state.details.coverUrl,
+                                            state.details.coverColor
                                         )
                                     },
                                     onRecommendMedia = viewModel::recommendMedia,
@@ -708,31 +715,6 @@ fun MediaDetailsScreen(
             }
         }
     }
-}
-
-/**
- * Wraps the media page in a palette seeded from its own cover art, when the "Colors from artwork"
- * appearance preference is on. Titles AniList ships no cover color for, and colors too washed out
- * to read as a hue, fall through to the app theme. The viewer's palette style, light/dark choice
- * and AMOLED setting are all preserved.
- */
-@Composable
-private fun MediaArtworkThemeOverride(
-    coverColor: String?,
-    content: @Composable () -> Unit,
-) {
-    val appSettings = LocalAppSettings.current
-    val enabled by appSettings.mediaArtworkTheming.collectAsStateWithLifecycle()
-    val themeMode by appSettings.themeMode.collectAsStateWithLifecycle()
-    val paletteStyle by appSettings.paletteStyle.collectAsStateWithLifecycle()
-    val amoledEnabled by appSettings.amoledEnabled.collectAsStateWithLifecycle()
-    val scheme = mediaArtworkColorScheme(
-        seed = if (enabled) mediaArtworkSeedColor(coverColor) else null,
-        darkTheme = themeMode.resolveDarkTheme(),
-        amoled = amoledEnabled,
-        paletteStyle = paletteStyle,
-    )
-    MaterialTheme(colorScheme = scheme, content = content)
 }
 
 @Composable

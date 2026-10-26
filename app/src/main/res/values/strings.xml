@@ -317,12 +317,12 @@
     <string name="toggle_view">Toggle View</string>
     <string name="sort_title_az">Title</string>
     <string name="sort_progress">Progress</string>
-    <string name="sort_airing_soon">Airing Soon</string>
+    <string name="sort_airing_soon">Airing soon</string>
     <string name="sort_score">Score</string>
-    <string name="sort_last_updated">Updated At</string>
-    <string name="sort_last_added">Added At</string>
-    <string name="sort_start_date">Started At</string>
-    <string name="sort_release_date">Release Date</string>
+    <string name="sort_last_updated">Updated</string>
+    <string name="sort_last_added">Added</string>
+    <string name="sort_start_date">Started</string>
+    <string name="sort_release_date">Release date</string>
     <string name="sort_default">Default</string>
     <string name="sort_popularity">Popularity</string>
     <string name="sort_average_score">Average Score</string>
@@ -1072,7 +1072,7 @@
     <!-- Media Status (for search filter) -->
     <string name="media_status_airing">Airing</string>
     <string name="media_status_finished">Finished</string>
-    <string name="media_status_not_yet_released">Not Yet Released</string>
+    <string name="media_status_not_yet_released">Not yet released</string>
     <string name="media_status_cancelled">Cancelled</string>
     <string name="media_status_hiatus">Hiatus</string>
     <!-- Media Formats -->
@@ -1481,6 +1481,7 @@
     <string name="search_header_staff">Staff</string>
     <string name="search_header_users">Users</string>
     <string name="search_header_studios">Studios</string>
+    <string name="search_result_studio">Studio</string>
     <string name="search_view_all_results">View all %1$d results</string>
     <string name="search_favourites_count">%d favourites</string>
     <string name="empty_no_items">No items found</string>
@@ -1762,6 +1763,7 @@
     <string name="share_action_share">Share</string>
     <string name="share_saved_to_gallery">Saved to gallery</string>
     <string name="share_save_failed">Couldn\'t save image</string>
+    <string name="share_save_needs_storage">Allow storage access to save images</string>
     <string name="share_copied">Link copied</string>
     <string name="share_card_source">AniList</string>
     <string name="share_card_brand" translatable="false">AniSync</string>
@@ -1924,6 +1926,21 @@
     <string name="reset">Reset</string>
     <string name="done">Done</string>
     <string name="search_tags_hint">Search tags</string>
+    <string name="tag_picker_title">Tags · %1$d↑ %2$d↓</string>
+    <string name="tag_picker_other">Other</string>
+    <string name="tag_picker_spoilers">Spoilers</string>
+    <plurals name="tag_picker_count">
+        <item quantity="one">%1$d tag</item>
+        <item quantity="other">%1$d tags</item>
+    </plurals>
+    <string name="tag_picker_included">%1$d included</string>
+    <string name="tag_picker_excluded">%1$d excluded</string>
+    <string name="tag_picker_included_excluded">%1$d included · %2$d excluded</string>
+    <string name="tag_picker_empty">No tags available</string>
+    <string name="tag_picker_no_match">No tags match \"%1$s\"</string>
+    <string name="a11y_filter_off">Off</string>
+    <string name="a11y_filter_included">Included</string>
+    <string name="a11y_filter_excluded">Excluded</string>
     <string name="forum_filter_subscribed">Subscribed</string>
     <string name="forum_start_discussion">Start a discussion about this</string>
     <!-- Content descriptions -->
@@ -2157,6 +2174,49 @@
     <string name="library_filter_format">Format</string>
     <string name="library_filter_genre">Genre</string>
     <string name="library_filter_more">+ %1$d more</string>
+    <string name="library_filter_exclude_hint">Tap to include, tap again to exclude. Hold to exclude.</string>
+    <string name="filter_hint_with_counts">%1$s. %2$s</string>
+    <string name="filter_chip_value">%1$s · %2$s</string>
+    <string name="filter_chip_value_more">%1$s · %2$s +%3$d</string>
+    <string name="filter_value_more">%1$s +%2$d</string>
+    <string name="filter_publishing_status">Publishing status</string>
+    <string name="filter_year_and_season">Year and season</string>
+    <string name="filter_more_title">More filters</string>
+    <string name="filter_source">Source</string>
+    <string name="filter_country">Country</string>
+    <string name="filter_mean_score">Mean score</string>
+    <string name="filter_episodes">Episodes</string>
+    <string name="filter_chapters">Chapters</string>
+    <string name="filter_adult_content">Adult content</string>
+    <string name="filter_any">Any</string>
+    <string name="filter_at_least">At least</string>
+    <string name="filter_at_most">At most</string>
+    <string name="filter_exactly">Exactly</string>
+    <string name="filter_at_least_value">At least %1$s</string>
+    <string name="filter_at_most_value">At most %1$s</string>
+    <string name="filter_exactly_value">Exactly %1$s</string>
+    <string name="filter_adult_hide">Hide adult</string>
+    <string name="filter_adult_only">Adult only</string>
+    <string name="filter_loading_genres">Loading genres…</string>
+    <string name="country_japan">Japan</string>
+    <string name="country_south_korea">South Korea</string>
+    <string name="country_china">China</string>
+    <string name="country_taiwan">Taiwan</string>
+    <string name="search_sort_best_match">Best match</string>
+    <string name="search_sort_popularity">Popularity</string>
+    <string name="search_sort_score">Score</string>
+    <string name="search_sort_trending">Trending</string>
+    <string name="search_sort_favourites">Favourites</string>
+    <string name="search_sort_release_date">Release date</string>
+    <string name="search_sort_updated">Updated</string>
+    <string name="search_sort_title">Title</string>
+    <string name="search_sort_episodes">Episodes</string>
+    <string name="search_sort_duration">Duration</string>
+    <string name="search_sort_chapters">Chapters</string>
+    <string name="search_sort_volumes">Volumes</string>
+    <string name="library_filter_tags">Tags</string>
+    <string name="library_filter_chip_sort">Sort · %1$s</string>
+    <string name="library_filter_chip_count">%1$s · %2$d</string>
     <string name="library_episode_short">EP %1$d</string>
     <string name="library_episodes_behind_short">%1$d behind</string>
     <string name="library_progress_out">%1$d / %2$d out</string>
@@ -2285,6 +2345,8 @@
     <string name="whats_new_moved">Moved</string>
     <string name="a11y_whats_new_inside">Something new inside</string>
     <string name="whats_new_general_notice">These used to be in Look and feel.</string>
+    <string name="whats_new_library_filters">Filters moved here from the sort button. You can now filter by tags and exclude genres.</string>
+    <string name="whats_new_discover_filters">The type filter is now the row above the results. Season moved in with Year, and every sort runs both ways.</string>
     <string name="dev_tools_reset_whats_new">Reset what’s new</string>
     <string name="dev_tools_reset_whats_new_subtitle">Shows every New and Moved badge again, as if the update just landed</string>
     <string name="dismiss">Dismiss</string>

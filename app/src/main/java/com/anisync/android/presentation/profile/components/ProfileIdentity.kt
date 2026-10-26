@@ -60,11 +60,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.anisync.android.R
+import com.anisync.android.data.WhatsNewItem
 import com.anisync.android.presentation.components.rememberActiveWhatsNew
 import com.anisync.android.presentation.components.bannerScrimBrush
 import com.anisync.android.presentation.components.bannerScrimHeight
 import com.anisync.android.domain.UserProfile
 import com.anisync.android.presentation.profile.util.formatProfileRelativeTime
+import com.anisync.android.presentation.util.pluralStringResourceOrDefault
 import com.anisync.android.ui.theme.emphasis
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -163,7 +165,8 @@ fun ProfileBannerSurface(
                 contentColor = Color.White
             )
         ) {
-            val showDot = isOwnProfile && rememberActiveWhatsNew().isNotEmpty()
+            val showDot = isOwnProfile &&
+                rememberActiveWhatsNew().any { it.place == WhatsNewItem.Place.SETTINGS }
             BadgedBox(badge = { if (showDot) Badge() }) {
                 Icon(
                     imageVector = topActionIcon,
@@ -569,7 +572,7 @@ private fun unreadCountAccessibilityLabel(count: Int): String =
     if (count > 999) {
         stringResource(R.string.notifications_unread_overflow_a11y)
     } else {
-        androidx.compose.ui.res.pluralStringResource(
+        pluralStringResourceOrDefault(
             R.plurals.notifications_unread_count_a11y,
             count,
             count

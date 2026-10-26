@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Library Tag Filters** - Library search can filter by tag, with the same picker as Search: a search box, categories, and spoiler tags kept shut until opened. A tag only counts above AniList's rank cut-off of 18, as it does in Search, and adult tags stay hidden unless adult content is on. Tags come down in the background on a request of their own, for new titles and once a week, so the library refresh is as quick as before. (#158)
+
+### Changed
+
+- **Library Filters** - Filters moved from the sort sheet into library search, behind a chip bar like Discover's, and narrow the search results rather than the lists. Genres can be excluded as well as included, every chosen genre and tag has to match, and filters work with an empty search box. Sort keeps its own sheet, opened from the bar or from a Sort chip in search. (#158)
+- **Search Results** - Discover and Library search draw their results with the Library's cards: a row with the cover, two lines of title and either the episode bar or the format, year, length, score and release state, and the Library grid card. In Discover, All previews three of each type with See all in the list and a rail of posters in the grid, and a title ends in its list or in Add to list. Library search groups its rows by list. A rail under the filters picks the category, with the list and grid switch pinned at its start.
+- **Search Filters And Sort** - Both searches share one filter bar and one set of sheets: options two to a row, a Clear chip once something is filtered, and a button that shows how many titles are left. Sort is a column and a direction, so every column sorts both ways, and Best match joins while a query is typed. Discover's Type filter became the rail, Airing status has its own chip, and Season moved in with Year.
+- **Library Grid** - Cards show the year beside the format and keep both lines of a long title.
+- **Studios** - The Studios chip in Discover lists the most favourited studios straight away, and typing a name narrows them.
+
+### Fixed
+
+- **Library Sort** - The direction toggle shows which way the list runs, so Score reads Descending while the highest score comes first.
+- **Search Keyboard** - The search key closes the keyboard in Discover, Library and Forum search, so the results it covered come into view.
+- **Feed In Spanish** - The feed no longer closes when it groups a run of list updates while AniSync is in Spanish. Anywhere a translation lacks the wording for a count, the English wording shows instead, notifications included. (#160)
+- **Share Cards On Android 8** - A shared or saved card no longer comes out as diagonal streaks on phones whose graphics chip pads each row of the image. (#162)
+- **Saving Share Cards On Android 8 And 9** - Save asks for storage access the first time and puts the card in Pictures/AniSync as a PNG, as it does on newer versions. Before, it failed every time. (#163)
+
 ## [3.3.0] - 2026-10-20
 
 ### Added

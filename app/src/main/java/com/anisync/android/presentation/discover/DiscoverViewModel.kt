@@ -2,7 +2,6 @@ package com.anisync.android.presentation.discover
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.anisync.android.data.DiscoverViewMode
 import com.anisync.android.domain.ADULT_GENRES
 import com.anisync.android.domain.AdultMode
 import com.anisync.android.domain.AiringEpisode
@@ -18,10 +17,11 @@ import com.anisync.android.domain.MediaReview
 import com.anisync.android.domain.MediaTag
 import com.anisync.android.domain.OriginCountry
 import com.anisync.android.domain.Result
+import com.anisync.android.domain.ResultCategory
 import com.anisync.android.domain.SearchFilters
 import com.anisync.android.domain.SearchRepository
-import com.anisync.android.domain.SearchType
-import com.anisync.android.domain.SortOption
+import com.anisync.android.domain.SearchSort
+import com.anisync.android.domain.SearchSortColumn
 import com.anisync.android.presentation.discover.components.BrowseChip
 import com.anisync.android.type.MediaFormat
 import com.anisync.android.type.MediaSeason
@@ -71,7 +71,9 @@ class DiscoverViewModel @Inject constructor(
 
     private data class SearchTriggerState(
         val query: String = "",
-        val filterHash: Int = 0
+        val filterHash: Int = 0,
+        /** Tells the Studios chip apart from a cleared search, which carries the same query and filters. */
+        val browsingStudios: Boolean = false
     )
 
     init {
@@ -96,29 +98,36 @@ class DiscoverViewModel @Inject constructor(
 
     /**
      * External "open search with these filters" requests (ranking cards, genre/tag
-     * chips on media details). Applies the preset filters over a blank query, fires
-     * the search, and bumps [DiscoverUiState.searchOverlayRequest] so the
-     * screen expands the search overlay. Waits for the first Success state so a
-     * request made before Discover ever composed isn't dropped.
+     * chips on media details). Applies the preset over a blank query, fires the search,
+     * and bumps [DiscoverUiState.searchOverlayRequest] so the screen expands the search
+     * overlay. Waits for the first Success state so a request made before Discover ever
+     * composed isn't dropped.
      */
     private fun observeSearchLaunchRequests() {
         viewModelScope.launch {
-            searchLauncher.pending.collect { filters ->
-                if (filters == null) return@collect
+            searchLauncher.pending.collect { request ->
+                if (request == null) return@collect
                 searchLauncher.consume()
-                val currentState = _uiState.value
-                _uiState.update {
-                    currentState.copy(
-                        searchQuery = "",
-                        searchFilters = filters,
-                        activeCategory = ResultCategory.ALL,
-                        searchOverlayRequest = currentState.searchOverlayRequest + 1
-                    )
-                }
-                loadTaxonomyIfNeeded()
-                searchTrigger.value = SearchTriggerState("", filters.hashCode())
+                openPresetSearch(request.filters, request.category)
             }
         }
+    }
+
+    private fun openPresetSearch(filters: SearchFilters, category: ResultCategory) {
+        _uiState.update {
+            it.copy(
+                searchQuery = "",
+                searchFilters = filters,
+                activeCategory = category,
+                searchOverlayRequest = it.searchOverlayRequest + 1
+            )
+        }
+        loadTaxonomyIfNeeded()
+        searchTrigger.value = SearchTriggerState(
+            query = "",
+            filterHash = filters.hashCode(),
+            browsingStudios = category == ResultCategory.STUDIOS
+        )
     }
 
     /**
@@ -194,20 +203,11 @@ class DiscoverViewModel @Inject constructor(
                 mediaType = type,
                 feeds = DiscoverFeeds(),
                 sectionOrder = visibleSections(type),
-                hiddenSections = hiddenSections(type),
-                searchAnime = emptyList(),
-                searchManga = emptyList()
+                hiddenSections = hiddenSections(type)
             )
         }
 
         loadDiscoveryData()
-
-        if (currentState.shouldSearch()) {
-            searchTrigger.value = SearchTriggerState(
-                currentState.searchQuery,
-                currentState.searchFilters.hashCode()
-            )
-        }
     }
 
     private fun refresh() {
@@ -234,7 +234,8 @@ class DiscoverViewModel @Inject constructor(
     /**
      * Appends the next page of the active category's results. Media buckets page
      * independently; the four entity buckets share one request/page counter, so
-     * paging one entity category also grows the other three. A fresh search (new
+     * paging one entity category also grows the other three. Studios listed before
+     * a name is typed page alone. A fresh search (new
      * trigger) resets the paging state wholesale, which implicitly invalidates any
      * in-flight append: the guard re-reads the state after the response and drops
      * the page if the query/filters changed underneath it.
@@ -247,7 +248,9 @@ class DiscoverViewModel @Inject constructor(
 
         val wantAnime = category == ResultCategory.ANIME
         val wantManga = category == ResultCategory.MANGA
-        val wantEntities = !wantAnime && !wantManga
+        val browsingStudios = currentState.isBrowsingStudios()
+        val wantEntities = !wantAnime && !wantManga && !browsingStudios
+        val wantStudios = wantEntities || browsingStudios
         val nextPage = when {
             wantAnime -> paging.animePage + 1
             wantManga -> paging.mangaPage + 1
@@ -264,7 +267,8 @@ class DiscoverViewModel @Inject constructor(
                 page = nextPage,
                 wantAnime = wantAnime,
                 wantManga = wantManga,
-                wantEntities = wantEntities
+                wantEntities = wantEntities,
+                wantStudios = wantStudios
             )
 
             // Outside the update block, which re-runs under contention. The results already on
@@ -291,9 +295,7 @@ class DiscoverViewModel @Inject constructor(
                     is Result.Success -> {
                         val data = result.data
                         val grouped = st.groupedResults
-                        // Appended entities go through the same type projection as the
-                        // initial page so a type-pinned search can't resurrect buckets.
-                        val appended = data.grouped.projectFor(filters.searchType)
+                        val appended = data.grouped
                         st.copy(
                             searchAnime = (st.searchAnime + data.anime).distinctBy { it.mediaId },
                             searchManga = (st.searchManga + data.manga).distinctBy { it.mediaId },
@@ -309,11 +311,11 @@ class DiscoverViewModel @Inject constructor(
                                 animeHasNext = if (wantAnime) data.animeHasNextPage else st.searchPaging.animeHasNext,
                                 mangaPage = if (wantManga) nextPage else st.searchPaging.mangaPage,
                                 mangaHasNext = if (wantManga) data.mangaHasNextPage else st.searchPaging.mangaHasNext,
-                                entitiesPage = if (wantEntities) nextPage else st.searchPaging.entitiesPage,
+                                entitiesPage = if (wantStudios) nextPage else st.searchPaging.entitiesPage,
                                 charactersHasNext = if (wantEntities) data.charactersHasNextPage else st.searchPaging.charactersHasNext,
                                 staffHasNext = if (wantEntities) data.staffHasNextPage else st.searchPaging.staffHasNext,
                                 usersHasNext = if (wantEntities) data.usersHasNextPage else st.searchPaging.usersHasNext,
-                                studiosHasNext = if (wantEntities) data.studiosHasNextPage else st.searchPaging.studiosHasNext
+                                studiosHasNext = if (wantStudios) data.studiosHasNextPage else st.searchPaging.studiosHasNext
                             )
                         )
                     }
@@ -324,27 +326,13 @@ class DiscoverViewModel @Inject constructor(
 
     private fun updateFilters(filters: SearchFilters) {
         val currentState = _uiState.value
-        // When the user changes search type, reset the result category so we don't
-        // get stuck on a tab that the new query may never populate.
-        val resetCategory = filters.searchType != currentState.searchFilters.searchType
-        _uiState.update {
-            currentState.copy(
-                searchFilters = filters,
-                activeCategory = if (resetCategory) ResultCategory.ALL else currentState.activeCategory
-            )
-        }
+        _uiState.update { currentState.copy(searchFilters = filters) }
         searchTrigger.value = SearchTriggerState(currentState.searchQuery, filters.hashCode())
     }
 
+    /** The order is a choice about how to read the results rather than a filter, so it stays. */
     private fun clearFilters() {
-        val currentState = _uiState.value
-        _uiState.update {
-            currentState.copy(
-                searchFilters = SearchFilters(),
-                activeCategory = ResultCategory.ALL
-            )
-        }
-        searchTrigger.value = SearchTriggerState(currentState.searchQuery, 0)
+        updateFilters(SearchFilters(sort = _uiState.value.searchFilters.sort))
     }
 
     private fun loadTaxonomyIfNeeded() {
@@ -383,54 +371,48 @@ class DiscoverViewModel @Inject constructor(
 
                     _uiState.update { currentState.copy(isSearching = true) }
 
-                    // Which buckets to surface — same gating as the old 3-request
-                    // fan-out, but it now rides a single SearchEverything request:
-                    //   ANIME/MANGA explicit → that media bucket only
-                    //   null (Auto)          → both media buckets + entities
-                    //   non-media type       → entities only (projected below)
-                    // Entities require an actual search string, so they're gated on
-                    // a non-blank query.
-                    val wantAnime = filters.searchType == SearchType.ANIME ||
-                        (filters.searchType == null && !filters.isNonMediaType)
-                    val wantManga = filters.searchType == SearchType.MANGA ||
-                        (filters.searchType == null && !filters.isNonMediaType)
-                    val wantEntities = query.isNotBlank() &&
-                        filters.searchType != SearchType.ANIME &&
-                        filters.searchType != SearchType.MANGA
-
+                    // Every category rides the one SearchEverything request, so the rail can
+                    // show what each holds. Characters, staff, users and studios are found by
+                    // name alone, so they wait for a query. The Studios chip is the exception
+                    // and lists the most favourited studios until a name narrows them.
+                    val browsingStudios = currentState.isBrowsingStudios()
                     val result = searchRepository.searchEverything(
                         query = query,
                         filters = filters,
-                        wantAnime = wantAnime,
-                        wantManga = wantManga,
-                        wantEntities = wantEntities
+                        wantAnime = !browsingStudios,
+                        wantManga = !browsingStudios,
+                        wantEntities = query.isNotBlank(),
+                        wantStudios = query.isNotBlank() || browsingStudios
                     )
 
                     val data = (result as? Result.Success)?.data
                     val animeEntries = data?.anime.orEmpty()
                     val mangaEntries = data?.manga.orEmpty()
-                    val grouped = (data?.grouped ?: GroupedSearchResults())
-                        .projectFor(filters.searchType)
+                    val grouped = data?.grouped ?: GroupedSearchResults()
                     val error = (result as? Result.Error)?.message
 
                     _uiState.update { st ->
                         st.copy(
-                                searchAnime = animeEntries,
-                                searchManga = mangaEntries,
-                                groupedResults = grouped,
-                                isSearching = false,
-                                searchError = error,
-                                activeCategory = st.activeCategory.clampedTo(
-                                    availableCategories(animeEntries, mangaEntries, grouped)
-                                ),
-                                // Fresh search = page 1 of every bucket.
-                                searchPaging = SearchPaging(
-                                    animeHasNext = data?.animeHasNextPage ?: false,
-                                    mangaHasNext = data?.mangaHasNextPage ?: false,
-                                    charactersHasNext = data?.charactersHasNextPage ?: false,
-                                    staffHasNext = data?.staffHasNextPage ?: false,
-                                    usersHasNext = data?.usersHasNextPage ?: false,
-                            studiosHasNext = data?.studiosHasNextPage ?: false
+                            searchAnime = animeEntries,
+                            searchManga = mangaEntries,
+                            groupedResults = grouped,
+                            searchTotals = SearchTotals(
+                                anime = data?.animeTotal ?: 0,
+                                manga = data?.mangaTotal ?: 0
+                            ),
+                            isSearching = false,
+                            searchError = error,
+                            activeCategory = st.activeCategory.clampedTo(
+                                populatedCategories(animeEntries, mangaEntries, grouped)
+                            ),
+                            // Fresh search = page 1 of every bucket.
+                            searchPaging = SearchPaging(
+                                animeHasNext = data?.animeHasNextPage ?: false,
+                                mangaHasNext = data?.mangaHasNextPage ?: false,
+                                charactersHasNext = data?.charactersHasNextPage ?: false,
+                                staffHasNext = data?.staffHasNextPage ?: false,
+                                usersHasNext = data?.usersHasNextPage ?: false,
+                                studiosHasNext = data?.studiosHasNextPage ?: false
                             )
                         )
                     }
@@ -560,53 +542,44 @@ class DiscoverViewModel @Inject constructor(
      * Schedule is the exception and never reaches here: the screen sends it to the airing calendar.
      */
     private fun onBrowseChip(chip: BrowseChip) {
-        val current = _uiState.value
-        val mediaSearchType =
-            if (current.mediaType == MediaType.ANIME) SearchType.ANIME else SearchType.MANGA
-        val filters = when (chip) {
+        val tabCategory =
+            if (_uiState.value.mediaType == MediaType.ANIME) ResultCategory.ANIME else ResultCategory.MANGA
+        when (chip) {
             BrowseChip.SEASONAL -> {
                 val now = Calendar.getInstance()
-                SearchFilters(
-                    searchType = SearchType.ANIME,
-                    season = now.currentSeason(),
-                    yearRange = IntRangeFilter(
-                        min = now.get(Calendar.YEAR),
-                        max = now.get(Calendar.YEAR)
-                    )
+                openPresetSearch(
+                    SearchFilters(
+                        season = now.currentSeason(),
+                        yearRange = IntRangeFilter(
+                            min = now.get(Calendar.YEAR),
+                            max = now.get(Calendar.YEAR)
+                        )
+                    ),
+                    ResultCategory.ANIME
                 )
             }
-            BrowseChip.TOP_100 -> SearchFilters(
-                searchType = mediaSearchType,
-                sort = SortOption.SCORE_DESC
+            BrowseChip.TOP_100 -> openPresetSearch(
+                SearchFilters(sort = SearchSort(SearchSortColumn.SCORE)),
+                tabCategory
             )
-            BrowseChip.STUDIOS -> SearchFilters(searchType = SearchType.STUDIOS)
-            BrowseChip.MANHWA -> SearchFilters(
-                searchType = SearchType.MANGA,
-                country = OriginCountry.SOUTH_KOREA
+            BrowseChip.STUDIOS -> openPresetSearch(SearchFilters(), ResultCategory.STUDIOS)
+            BrowseChip.MANHWA -> openPresetSearch(
+                SearchFilters(country = OriginCountry.SOUTH_KOREA),
+                ResultCategory.MANGA
             )
-            BrowseChip.MANHUA -> SearchFilters(
-                searchType = SearchType.MANGA,
-                country = OriginCountry.CHINA
+            BrowseChip.MANHUA -> openPresetSearch(
+                SearchFilters(country = OriginCountry.CHINA),
+                ResultCategory.MANGA
             )
-            BrowseChip.LIGHT_NOVELS -> SearchFilters(
-                searchType = SearchType.MANGA,
-                formats = setOf(MediaFormat.NOVEL)
+            BrowseChip.LIGHT_NOVELS -> openPresetSearch(
+                SearchFilters(formats = setOf(MediaFormat.NOVEL)),
+                ResultCategory.MANGA
             )
             // Genres has no single preset to apply, so it opens the overlay where the genre
             // picker already lives.
-            BrowseChip.GENRES -> SearchFilters(searchType = mediaSearchType)
-            BrowseChip.SCHEDULE -> return
+            BrowseChip.GENRES -> openPresetSearch(SearchFilters(), tabCategory)
+            BrowseChip.SCHEDULE -> Unit
         }
-        _uiState.update {
-            it.copy(
-                searchQuery = "",
-                searchFilters = filters,
-                activeCategory = ResultCategory.ALL,
-                searchOverlayRequest = it.searchOverlayRequest + 1
-            )
-        }
-        loadTaxonomyIfNeeded()
-        searchTrigger.value = SearchTriggerState("", filters.hashCode())
     }
 
     /**
@@ -711,7 +684,12 @@ class DiscoverViewModel @Inject constructor(
     }
 
     private fun DiscoverUiState.shouldSearch(): Boolean =
-        searchQuery.trim().length >= MIN_SEARCH_QUERY_LENGTH || searchFilters.hasActiveFilters
+        searchQuery.trim().length >= MIN_SEARCH_QUERY_LENGTH ||
+            searchFilters.hasActiveFilters ||
+            isBrowsingStudios()
+
+    private fun DiscoverUiState.isBrowsingStudios(): Boolean =
+        activeCategory == ResultCategory.STUDIOS && searchQuery.isBlank()
 }
 
 /**
@@ -740,42 +718,12 @@ data class SearchTaxonomy(
     val loaded: Boolean = false
 )
 
-/**
- * Resolve the AniList media type to use for media-search queries. The type
- * chip overrides the screen-level Anime/Manga toggle when set to an explicit
- * media value; non-media types fall back to the toggle (media query is
- * skipped entirely in that case — see [SearchFilters.isNonMediaType]).
- */
-private fun SearchFilters.effectiveMediaType(screenSelection: MediaType): MediaType =
-    when (searchType) {
-        SearchType.ANIME -> MediaType.ANIME
-        SearchType.MANGA -> MediaType.MANGA
-        else -> screenSelection
-    }
-
-/**
- * Strip categories the user didn't ask for. When the Type chip is non-media,
- * we want only the selected entity bucket to surface — the other buckets
- * would clutter the results header and the section list.
- */
-private fun GroupedSearchResults.projectFor(searchType: SearchType?): GroupedSearchResults =
-    when (searchType) {
-        SearchType.CHARACTERS -> GroupedSearchResults(characters = characters)
-        SearchType.STAFF -> GroupedSearchResults(staff = staff)
-        SearchType.USERS -> GroupedSearchResults(users = users)
-        SearchType.STUDIOS -> GroupedSearchResults(studios = studios)
-        // Media-pinned types: searchMedia carries the result; the entity
-        // buckets must stay empty so the category chips don't surface them.
-        SearchType.ANIME, SearchType.MANGA -> GroupedSearchResults()
-        null -> this
-    }
-
-private fun availableCategories(
+/** The categories this search actually returned something for. */
+private fun populatedCategories(
     animeEntries: List<com.anisync.android.domain.LibraryEntry>,
     mangaEntries: List<com.anisync.android.domain.LibraryEntry>,
     grouped: GroupedSearchResults
 ): Set<ResultCategory> = buildSet {
-    add(ResultCategory.ALL)
     if (animeEntries.isNotEmpty()) add(ResultCategory.ANIME)
     if (mangaEntries.isNotEmpty()) add(ResultCategory.MANGA)
     if (grouped.characters.isNotEmpty()) add(ResultCategory.CHARACTERS)
@@ -784,5 +732,5 @@ private fun availableCategories(
     if (grouped.studios.isNotEmpty()) add(ResultCategory.STUDIOS)
 }
 
-private fun ResultCategory.clampedTo(available: Set<ResultCategory>): ResultCategory =
-    if (this in available) this else ResultCategory.ALL
+private fun ResultCategory.clampedTo(populated: Set<ResultCategory>): ResultCategory =
+    if (this in populated) this else ResultCategory.ALL

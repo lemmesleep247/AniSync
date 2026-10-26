@@ -90,11 +90,17 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.anisync.android.R
+import com.anisync.android.data.WhatsNewItem
 import com.anisync.android.domain.LibraryEntry
 import com.anisync.android.domain.LibraryPriority
 import com.anisync.android.domain.LibraryStatus
+import com.anisync.android.presentation.components.result.ResultGroupHeader
 import com.anisync.android.presentation.components.CustomPullToRefreshIndicator
 import com.anisync.android.presentation.components.ErrorState
+import com.anisync.android.presentation.components.LocalWhatsNew
+import com.anisync.android.presentation.components.WhatsNewDot
+import com.anisync.android.presentation.components.rememberActiveWhatsNew
+import com.anisync.android.presentation.discover.components.DiscoverNoResultsState
 import com.anisync.android.presentation.components.alert.rememberRateLimitedRefresh
 import com.anisync.android.presentation.library.components.BulkAddToListSheet
 import com.anisync.android.presentation.library.components.BulkPrioritySheet
@@ -106,26 +112,29 @@ import com.anisync.android.presentation.library.components.ScoreOnCompleteSheet
 import com.anisync.android.presentation.library.components.LibraryEmptyState
 import com.anisync.android.presentation.library.components.LibraryBulkActionBar
 import com.anisync.android.presentation.library.components.LibraryBulkMoreMenu
-import com.anisync.android.presentation.library.components.LibraryFilterSheet
+import com.anisync.android.presentation.library.components.LibraryFilterChipBar
+import com.anisync.android.presentation.library.components.LibraryFilterId
+import com.anisync.android.presentation.library.components.LibraryFilterSheetHost
 import com.anisync.android.presentation.library.components.LibraryOverflowMenu
 import com.anisync.android.presentation.library.components.LibraryPosterCard
 import com.anisync.android.presentation.library.components.LibraryQueueRow
 import com.anisync.android.presentation.library.components.LibraryRail
-import com.anisync.android.presentation.library.components.LibrarySearchCategoryBar
-import com.anisync.android.presentation.library.components.LibrarySearchResultCard
 import com.anisync.android.presentation.library.components.LibrarySelectionTopBar
+import com.anisync.android.presentation.library.components.LibrarySortSheet
 import com.anisync.android.presentation.library.components.LibraryViewOptionsSheet
 import com.anisync.android.presentation.library.components.ListManagementSheet
 import com.anisync.android.presentation.library.components.SkeletonGrid
 import com.anisync.android.presentation.library.components.SkeletonList
 import com.anisync.android.presentation.library.components.SortIcon
 import com.anisync.android.presentation.library.components.airedCount
+import com.anisync.android.presentation.settings.components.InfoNotice
 import com.anisync.android.presentation.util.LIBRARY_ALL_TAB_ID
 import com.anisync.android.presentation.util.LIBRARY_FAVORITES_TAB_ID
 import com.anisync.android.presentation.util.LocalAppSettings
 import com.anisync.android.presentation.util.LocalGridColumnCount
 import com.anisync.android.presentation.util.LocalGridColumnsAuto
 import com.anisync.android.presentation.util.LocalMainNavBarInset
+import com.anisync.android.presentation.util.WindowModalSheetScope
 import com.anisync.android.presentation.util.posterGridColumns
 import com.anisync.android.presentation.util.toLabel
 import com.anisync.android.type.MediaType
@@ -166,6 +175,19 @@ sealed class LibraryTab {
      * id and no bulk mutation can address them.
      */
     val supportsSelection: Boolean get() = this !is Favorites
+
+    companion object {
+        /** The tab an id from the tab order names, or null for a list that no longer exists. */
+        fun fromId(id: String, customListNames: Collection<String>): LibraryTab? = when {
+            id == LIBRARY_ALL_TAB_ID -> All
+            id == LIBRARY_FAVORITES_TAB_ID -> Favorites
+            id.startsWith("status:") -> {
+                val statusName = id.removePrefix("status:")
+                LibraryStatus.entries.find { it.name == statusName }?.let { Standard(it) }
+            }
+            else -> if (id in customListNames) Custom(id) else null
+        }
+    }
 }
 
 @OptIn(
@@ -194,7 +216,8 @@ fun LibraryScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
 
-    var showFilterSheet by rememberSaveable { mutableStateOf(false) }
+    var showSortSheet by rememberSaveable { mutableStateOf(false) }
+    var openedFilter by remember { mutableStateOf<LibraryFilterId?>(null) }
     var showOverflow by rememberSaveable { mutableStateOf(false) }
     var showViewOptions by rememberSaveable { mutableStateOf(false) }
     var showListManagement by remember { mutableStateOf(false) }
@@ -206,17 +229,7 @@ fun LibraryScreen(
 
     val tabs = remember(uiState.tabOrder, uiState.hiddenListNames, uiState.customListNames) {
         uiState.tabOrder.mapNotNull { id ->
-            if (id in uiState.hiddenListNames) return@mapNotNull null
-            when {
-                id == LIBRARY_ALL_TAB_ID -> LibraryTab.All
-                id == LIBRARY_FAVORITES_TAB_ID -> LibraryTab.Favorites
-                id.startsWith("status:") -> {
-                    val statusName = id.removePrefix("status:")
-                    LibraryStatus.entries.find { it.name == statusName }?.let { LibraryTab.Standard(it) }
-                }
-
-                else -> if (id in uiState.customListNames) LibraryTab.Custom(id) else null
-            }
+            if (id in uiState.hiddenListNames) null else LibraryTab.fromId(id, uiState.customListNames)
         }
     }
 
@@ -313,11 +326,11 @@ fun LibraryScreen(
             textFieldState = textFieldState,
             isSearchQueryEmpty = isSearchQueryEmpty,
             isGridView = isGridView,
-            isNonDefaultSort = sortOption != LibrarySort.AIRING_SOON || !isAscending ||
-                !uiState.filters.isEmpty,
-            isAscending = isAscending,
+            isNonDefaultSort = sortOption != LibrarySort.AIRING_SOON || !isAscending,
+            showWhatsNewDot = WhatsNewItem.LIBRARY_SEARCH_FILTERS in rememberActiveWhatsNew(),
+            // The arrow shows the way the list really runs, as the sort sheet's toggle does.
+            isAscending = sortOption.flipDirection(isAscending),
             showListManagement = showListManagement,
-            onSearch = { keyboardController?.hide() },
             onBackClick = {
                 focusManager.clearFocus()
                 keyboardController?.hide()
@@ -327,7 +340,7 @@ fun LibraryScreen(
             onToggleView = {
                 viewModel.onAction(LibraryAction.SetGridView(!isGridView))
             },
-            onSortAndFilter = { showFilterSheet = true },
+            onSort = { showSortSheet = true },
             onOverflow = { showOverflow = true },
             overflowMenu = {
                 LibraryOverflowMenu(
@@ -586,7 +599,6 @@ fun LibraryScreen(
                                             coroutineScope.launch { pagerState.animateScrollToPage(index) }
                                         }
                                     },
-                                    onClearFilters = { viewModel.onAction(LibraryAction.ClearFilters) },
                                     sharedTransitionScope = sharedTransitionScope,
                                     animatedVisibilityScope = animatedVisibilityScope
                                 )
@@ -633,36 +645,68 @@ fun LibraryScreen(
         }
     }
 
-    if (editingEntry == null) {
-        ExpandedFullScreenSearchBar(
-            state = searchBarState,
-            inputField = { ProvideDisplaySize(content = inputField) }
-        ) {
-            ProvideDisplaySize {
-                LibrarySearchOverlay(
-                    uiState = uiState,
-                    isSearchQueryEmpty = isSearchQueryEmpty,
-                    onCategoryChange = { viewModel.onAction(LibraryAction.OnSearchCategoryChange(it)) },
-                    onResultClick = onSearchResultClick
-                )
-            }
+    val searchView = remember(
+        uiState.searchMatches,
+        uiState.searchMatchesByCategory,
+        uiState.tabOrder,
+        uiState.hiddenListNames,
+        uiState.customListNames,
+        uiState.activeSearchCategory
+    ) { librarySearchView(uiState) }
+
+    ExpandedFullScreenSearchBar(
+        state = searchBarState,
+        // On background rather than surfaceContainerHigh, so the cards keep their contrast.
+        colors = SearchBarDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
+        inputField = { ProvideDisplaySize(content = inputField) }
+    ) {
+        ProvideDisplaySize {
+            LibrarySearchOverlay(
+                uiState = uiState,
+                view = searchView,
+                isSearchQueryEmpty = isSearchQueryEmpty,
+                onFilterChipTap = { openedFilter = it },
+                onClearFilters = { viewModel.onAction(LibraryAction.ClearFilters) },
+                onCategoryChange = { viewModel.onAction(LibraryAction.OnSearchCategoryChange(it)) },
+                onGridChange = { viewModel.onAction(LibraryAction.SetGridView(it)) },
+                onResultClick = onSearchResultClick,
+                onIncrement = handleIncrement,
+                onEdit = handleEdit
+            )
         }
     }
 
-    LibraryFilterSheet(
-        visible = showFilterSheet,
+    // The search overlay is a popup over both panes on expanded widths, so its sheets scope to the
+    // window rather than anchoring to the list pane hidden behind it.
+    WindowModalSheetScope {
+        LibraryFilterSheetHost(
+            openedFilter = openedFilter,
+            sort = sortOption,
+            isAscending = isAscending,
+            filters = uiState.filters,
+            mediaType = mediaType,
+            matchingTitles = searchView.entries.size,
+            availableGenres = uiState.availableGenres,
+            availableTags = uiState.availableTags,
+            availableFormats = uiState.availableFormats,
+            availableAiringStatuses = uiState.availableAiringStatuses,
+            showAdultContent = uiState.showAdultContent,
+            onSortChange = { sort, ascending ->
+                viewModel.onAction(LibraryAction.OnSortOptionChange(sort, ascending))
+            },
+            onFiltersChange = { viewModel.onAction(LibraryAction.SetFilters(it)) },
+            onDismiss = { openedFilter = null }
+        )
+    }
+
+    LibrarySortSheet(
+        visible = showSortSheet,
         sort = sortOption,
         isAscending = isAscending,
-        filters = uiState.filters,
-        availableGenres = uiState.availableGenres,
-        availableFormats = uiState.availableFormats,
-        availableAiringStatuses = uiState.availableAiringStatuses,
-        resultCount = entriesForTab(uiState, currentTab).size,
         onSortChange = { sort, ascending ->
             viewModel.onAction(LibraryAction.OnSortOptionChange(sort, ascending))
         },
-        onFiltersChange = { viewModel.onAction(LibraryAction.SetFilters(it)) },
-        onDismiss = { showFilterSheet = false }
+        onDismiss = { showSortSheet = false }
     )
 
     BulkStatusSheet(
@@ -747,28 +791,27 @@ fun LibraryScreen(
     )
 
     editingEntry?.let { entry ->
-        LaunchedEffect(Unit) {
-            if (searchBarState.currentValue == SearchBarValue.Expanded) {
-                searchBarState.animateToCollapsed()
-            }
+        val sheet = @Composable {
+            EditLibraryEntrySheet(
+                entry = entry,
+                titleLanguage = titleLanguage,
+                scoreFormat = uiState.userScoreFormat,
+                availableCustomLists = uiState.customListNames,
+                advancedScoringCategories = uiState.advancedScoringCategories,
+                onDismiss = { editingEntry = null },
+                onSave = { updatedEntry ->
+                    viewModel.onAction(LibraryAction.UpdateEntry(updatedEntry))
+                    editingEntry = null
+                },
+                onDelete = {
+                    viewModel.onAction(LibraryAction.DeleteEntry(entry.id, entry.mediaId))
+                    editingEntry = null
+                }
+            )
         }
-
-        EditLibraryEntrySheet(
-            entry = entry,
-            titleLanguage = titleLanguage,
-            scoreFormat = uiState.userScoreFormat,
-            availableCustomLists = uiState.customListNames,
-            advancedScoringCategories = uiState.advancedScoringCategories,
-            onDismiss = { editingEntry = null },
-            onSave = { updatedEntry ->
-                viewModel.onAction(LibraryAction.UpdateEntry(updatedEntry))
-                editingEntry = null
-            },
-            onDelete = {
-                viewModel.onAction(LibraryAction.DeleteEntry(entry.id, entry.mediaId))
-                editingEntry = null
-            }
-        )
+        // From search the sheet opens over the overlay, which covers both panes, so the results
+        // are still there when it closes. From the list it stays on the list's own pane.
+        if (searchBarState.currentValue == SearchBarValue.Expanded) WindowModalSheetScope(sheet) else sheet()
     }
 
     uiState.scorePromptEntry?.let { entry ->
@@ -817,7 +860,6 @@ private fun LibraryTabContent(
     onEdit: (LibraryEntry) -> Unit,
     onBrowseDiscover: () -> Unit,
     onGoToTab: (String) -> Unit,
-    onClearFilters: () -> Unit,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
@@ -830,15 +872,8 @@ private fun LibraryTabContent(
                     LibraryEmptyState(
                         tab = tab,
                         mediaType = mediaType,
-                        // Only report filtering when the list would otherwise have something in it.
-                        filterCount = if ((uiState.unfilteredTabCounts[tab.toId()] ?: 0) > 0) {
-                            uiState.filters.activeCount
-                        } else {
-                            0
-                        },
                         onBrowseDiscover = onBrowseDiscover,
-                        onGoToTab = onGoToTab,
-                        onClearFilters = onClearFilters
+                        onGoToTab = onGoToTab
                     )
                 }
             }
@@ -878,7 +913,7 @@ private fun LibraryTabContent(
                     key = "header_${group.title}",
                     contentType = "header"
                 ) {
-                    QueueGroupHeader(title = group.title, count = group.entries.size)
+                    ResultGroupHeader(title = stringResource(group.title), count = group.entries.size)
                 }
             }
 
@@ -945,27 +980,6 @@ private fun LibraryTabContent(
     }
 }
 
-@Composable
-private fun QueueGroupHeader(title: Int, count: Int) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Text(
-            text = stringResource(title),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-        Text(
-            text = count.toString(),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
 /** A run of entries under an optional header. */
 private data class QueueGroup(val title: Int?, val entries: List<LibraryEntry>)
 
@@ -1023,91 +1037,6 @@ private fun LibraryPriority.titleRes(): Int = when (this) {
     LibraryPriority.LOW -> R.string.priority_low
 }
 
-@Composable
-private fun LibrarySearchOverlay(
-    uiState: LibraryUiState,
-    isSearchQueryEmpty: Boolean,
-    onCategoryChange: (String) -> Unit,
-    onResultClick: (Int) -> Unit
-) {
-    when {
-        uiState.isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(
-                text = stringResource(R.string.loading),
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        uiState.errorMessage != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(text = uiState.errorMessage!!, color = MaterialTheme.colorScheme.error)
-        }
-
-        uiState.searchMatches.isEmpty() && !isSearchQueryEmpty ->
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = stringResource(R.string.search_no_results),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyLarge
-                )
-            }
-
-        // Blank query: keep the overlay empty until the user types (Discover parity).
-        uiState.searchMatches.isEmpty() -> Box(Modifier.fillMaxSize())
-
-        else -> {
-            val byCategory = uiState.searchMatchesByCategory
-            val categories = remember(uiState.searchMatches, byCategory, uiState.tabOrder, uiState.hiddenListNames) {
-                buildList {
-                    add(LIBRARY_ALL_TAB_ID to uiState.searchMatches.size)
-                    uiState.tabOrder.forEach { id ->
-                        if (id != LIBRARY_ALL_TAB_ID && id !in uiState.hiddenListNames) {
-                            byCategory[id]?.let { add(id to it.size) }
-                        }
-                    }
-                }
-            }
-            val categoryIds = remember(categories) { categories.mapTo(HashSet()) { it.first } }
-            val effectiveCategory = if (uiState.activeSearchCategory in categoryIds) {
-                uiState.activeSearchCategory
-            } else {
-                LIBRARY_ALL_TAB_ID
-            }
-            val activeList = if (effectiveCategory == LIBRARY_ALL_TAB_ID) {
-                uiState.searchMatches
-            } else {
-                byCategory[effectiveCategory] ?: uiState.searchMatches
-            }
-
-            Column(modifier = Modifier.fillMaxSize()) {
-                LibrarySearchCategoryBar(
-                    activeCategory = effectiveCategory,
-                    categories = categories,
-                    mediaType = uiState.mediaType,
-                    onCategoryChange = onCategoryChange
-                )
-                LazyColumn(
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(
-                        items = activeList,
-                        key = { "search_${it.mediaId}" },
-                        contentType = { "SearchResult" }
-                    ) { entry ->
-                        LibrarySearchResultCard(
-                            entry = entry,
-                            mediaType = uiState.mediaType,
-                            onClick = { onResultClick(entry.mediaId) },
-                            titleLanguage = uiState.titleLanguage
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
 /**
  * Isolated so Compose keeps the field's node state when captured values change; inlining it drops
  * focus mid-typing.
@@ -1123,16 +1052,19 @@ private fun LibrarySearchBarInputField(
     isSearchQueryEmpty: Boolean,
     isGridView: Boolean,
     isNonDefaultSort: Boolean,
+    showWhatsNewDot: Boolean,
     isAscending: Boolean,
     showListManagement: Boolean,
-    onSearch: () -> Unit,
     onBackClick: () -> Unit,
     onClearClick: () -> Unit,
     onToggleView: () -> Unit,
-    onSortAndFilter: () -> Unit,
+    onSort: () -> Unit,
     onOverflow: () -> Unit,
     overflowMenu: @Composable () -> Unit
 ) {
+    // Read here, not taken from the screen. The expanded field sits in the search dialog's own
+    // window, and only that window's controller can close the keyboard it opened.
+    val keyboardController = LocalSoftwareKeyboardController.current
     SearchBarDefaults.InputField(
         // Matches Discover: a collapsed bar sized by its content differs screen to screen.
         modifier = if (searchBarState.currentValue == SearchBarValue.Expanded) {
@@ -1143,13 +1075,22 @@ private fun LibrarySearchBarInputField(
         enabled = !showListManagement,
         searchBarState = searchBarState,
         textFieldState = textFieldState,
-        onSearch = { onSearch() },
+        onSearch = { keyboardController?.hide() },
         placeholder = {
-            Text(
-                text = stringResource(R.string.search_library_placeholder),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.search_library_placeholder),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (showWhatsNewDot && searchBarState.currentValue == SearchBarValue.Collapsed) {
+                    WhatsNewDot()
+                }
+            }
         },
         leadingIcon = if (searchBarState.currentValue == SearchBarValue.Expanded) {
             {
@@ -1176,7 +1117,7 @@ private fun LibrarySearchBarInputField(
                             contentDescription = stringResource(R.string.toggle_view)
                         )
                     }
-                    IconButton(onClick = onSortAndFilter) {
+                    IconButton(onClick = onSort) {
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier

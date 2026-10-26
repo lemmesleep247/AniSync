@@ -3,21 +3,26 @@ package com.anisync.android.presentation.library
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.anisync.android.data.AppSettings
+import com.anisync.android.data.network.RequestPriority
+import com.anisync.android.data.network.withRequestPriority
 import com.anisync.android.domain.LibraryEntry
 import com.anisync.android.domain.LibraryRepository
 import com.anisync.android.domain.LibraryStatus
 import com.anisync.android.domain.ProfileRepository
 import com.anisync.android.domain.Result
+import com.anisync.android.domain.Tag
 import com.anisync.android.domain.shouldAskForScore
 import com.anisync.android.domain.withCompletionScore
 import com.anisync.android.presentation.components.alert.ToastManager
 import com.anisync.android.presentation.components.alert.ToastType
 import com.anisync.android.presentation.util.LIBRARY_ALL_TAB_ID
 import com.anisync.android.presentation.util.LIBRARY_FAVORITES_TAB_ID
+import com.anisync.android.type.MediaType
 import com.anisync.android.util.getTitle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -108,10 +113,18 @@ class LibraryViewModel @Inject constructor(
         val tabCounts: Map<String, Int>,
         val searchMatches: List<LibraryEntry>,
         val searchMatchesByCategory: Map<String, List<LibraryEntry>>,
-        val unfilteredTabCounts: Map<String, Int>,
         val availableGenres: List<String>,
+        val availableTags: List<LibraryTagOption>,
         val availableFormats: List<com.anisync.android.type.MediaFormat>,
         val availableAiringStatuses: List<String>
+    )
+
+    private class LibrarySources(
+        val entries: List<LibraryEntry>,
+        val favorites: List<LibraryEntry>,
+        val listOrder: List<String>,
+        val hiddenLists: Set<String>,
+        val tagsByMedia: Map<Int, List<Tag>>
     )
 
     init {
@@ -149,6 +162,22 @@ class LibraryViewModel @Inject constructor(
 
         appSettings.libraryGridView.onEach { isGrid ->
             _uiState.update { it.copy(isGridView = isGrid) }
+        }.launchIn(viewModelScope)
+
+        // Turning adult content off drops any adult tag still selected, the same as Search does, so
+        // a filter the sheet no longer shows cannot keep narrowing the list.
+        appSettings.showAdultContent.onEach { show ->
+            _uiState.update { state ->
+                if (show) return@update state.copy(showAdultContent = true)
+                val adult = state.availableTags.filter { it.isAdult }.mapTo(HashSet()) { it.name }
+                state.copy(
+                    showAdultContent = false,
+                    filters = state.filters.copy(
+                        tagsIncluded = state.filters.tagsIncluded - adult,
+                        tagsExcluded = state.filters.tagsExcluded - adult
+                    )
+                )
+            }
         }.launchIn(viewModelScope)
 
         observeLibraryData()
@@ -389,11 +418,12 @@ class LibraryViewModel @Inject constructor(
                         libraryRepository.observeLibrary("", type),
                         profileRepository.observeProfile(),
                         listOrderFlow,
-                        hiddenListsFlow
-                    ) { libraryEntries, profile, listOrder, hiddenLists ->
+                        hiddenListsFlow,
+                        libraryRepository.observeLibraryTags()
+                    ) { libraryEntries, profile, listOrder, hiddenLists, tagsByMedia ->
                         val favorites =
                             profile?.favoriteAnime?.filter { it.type == type } ?: emptyList()
-                        Triple(libraryEntries, favorites, listOrder to hiddenLists)
+                        LibrarySources(libraryEntries, favorites, listOrder, hiddenLists, tagsByMedia)
                     }
                 }
                 .combine(
@@ -407,14 +437,19 @@ class LibraryViewModel @Inject constructor(
                             state.filters
                         )
                     }.distinctUntilChanged()
-                ) { (entries, favorites, listPrefs), combinedState ->
+                ) { sources, combinedState ->
                     val sort = combinedState[0] as LibrarySort
                     val ascending = combinedState[1] as Boolean
                     val query = combinedState[2] as String
                     val titleLang = combinedState[3] as com.anisync.android.data.TitleLanguage
                     val showPrivate = combinedState[4] as Boolean
                     val filters = combinedState[5] as LibraryFilters
-                    val (listOrder, hiddenLists) = listPrefs
+                    val entries = sources.entries
+                    val favorites = sources.favorites
+                    val listOrder = sources.listOrder
+                    val hiddenLists = sources.hiddenLists
+                    val tagsByMedia = sources.tagsByMedia
+                    fun LibraryEntry.matches() = filters.matches(this, tagsByMedia[mediaId].orEmpty())
 
                     // No early return for an empty library: the sort/group/count logic below all
                     // collapses to empties cleanly, and favorites/custom lists can still be non-empty.
@@ -482,9 +517,7 @@ class LibraryViewModel @Inject constructor(
                         if (notPrivate) {
                             for (name in e.customLists) {
                                 customNames.add(name)
-                                if (filters.matches(e)) {
-                                    customEntriesMap.getOrPut(name) { ArrayList() }.add(e)
-                                }
+                                customEntriesMap.getOrPut(name) { ArrayList() }.add(e)
                             }
                         }
                         if (notPrivate && !e.hiddenFromStatusLists) {
@@ -502,15 +535,13 @@ class LibraryViewModel @Inject constructor(
                         .flatMap { it.entry.genres }
                         .distinct()
                         .sorted()
+                    val availableTags = libraryTagOptions(dedupedEntries, tagsByMedia)
                     val availableFormats = com.anisync.android.type.MediaFormat.entries
                         .filter { format -> sortedEntries.any { it.entry.format == format } }
                     val availableAiringStatuses = AIRING_STATUS_ORDER
                         .filter { status -> sortedEntries.any { it.entry.mediaStatus == status } }
 
-                    val unfilteredEntries = visibilityFiltered.map { it.entry }
-                    val allEntries = ArrayList<LibraryEntry>(visibilityFiltered.size).also { out ->
-                        for (s in visibilityFiltered) if (filters.matches(s.entry)) out.add(s.entry)
-                    }
+                    val allEntries = visibilityFiltered.map { it.entry }
                     val grouped = allEntries.groupBy { it.status }
 
                     val customNamesSet = customNames.toSet()
@@ -520,7 +551,6 @@ class LibraryViewModel @Inject constructor(
                     val sortedCustomNames = tabOrder.filter { !it.startsWith("status:") && it in customNamesSet }
 
                     val sortedFavorites = favorites
-                        .filter { filters.matches(it) }
                         .sortedBy { it.getTitle(titleLang).lowercase() }
 
                     // Raw per-tab counts (independent of the query) for the tab badges.
@@ -531,37 +561,29 @@ class LibraryViewModel @Inject constructor(
                         customEntriesMap.forEach { (name, list) -> put(name, list.size) }
                     }
 
-                    val unfilteredTabCounts = buildMap {
-                        put(LIBRARY_ALL_TAB_ID, unfilteredEntries.size)
-                        unfilteredEntries.groupBy { it.status }
-                            .forEach { (status, list) -> put("status:${status.name}", list.size) }
-                        put(LIBRARY_FAVORITES_TAB_ID, favorites.size)
-                        unfilteredEntries
-                            .flatMap { entry -> entry.customLists.map { it to entry } }
-                            .groupBy({ it.first }, { it.second })
-                            .forEach { (name, list) -> put(name, list.size) }
-                    }
-
-                    // Search matches every title variant + notes, grouped by list so the overlay can
-                    // offer Discover-style category chips.
+                    // Search matches every title variant + notes, narrowed by the filters, grouped by
+                    // list so the overlay can offer Discover-style category chips. Filters alone are
+                    // enough to search, the way they are in Discover.
                     val trimmedQuery = query.trim()
                     val searchMatches: List<LibraryEntry>
                     val searchMatchesByCategory: Map<String, List<LibraryEntry>>
-                    if (trimmedQuery.isBlank()) {
+                    if (trimmedQuery.isBlank() && filters.isEmpty) {
                         searchMatches = emptyList()
                         searchMatchesByCategory = emptyMap()
                     } else {
                         val lowerQuery = trimmedQuery.lowercase()
-                        val matches = allEntries.filter { it.matchesQuery(lowerQuery) }
+                        fun LibraryEntry.found() =
+                            (lowerQuery.isEmpty() || matchesQuery(lowerQuery)) && matches()
+                        val matches = allEntries.filter { it.found() }
                         val byCategory = LinkedHashMap<String, List<LibraryEntry>>()
                         matches.groupBy { it.status }.forEach { (status, list) ->
                             byCategory["status:${status.name}"] = list
                         }
-                        sortedFavorites.filter { it.matchesQuery(lowerQuery) }
+                        sortedFavorites.filter { it.found() }
                             .takeIf { it.isNotEmpty() }
                             ?.let { byCategory[LIBRARY_FAVORITES_TAB_ID] = it }
                         customEntriesMap.forEach { (name, list) ->
-                            list.filter { it.matchesQuery(lowerQuery) }
+                            list.filter { it.found() }
                                 .takeIf { it.isNotEmpty() }
                                 ?.let { byCategory[name] = it }
                         }
@@ -581,9 +603,9 @@ class LibraryViewModel @Inject constructor(
                         searchMatches = searchMatches,
                         searchMatchesByCategory = searchMatchesByCategory,
                         availableGenres = availableGenres,
+                        availableTags = availableTags,
                         availableFormats = availableFormats,
-                        availableAiringStatuses = availableAiringStatuses,
-                        unfilteredTabCounts = unfilteredTabCounts
+                        availableAiringStatuses = availableAiringStatuses
                     )
                 }
                 .flowOn(Dispatchers.Default)
@@ -628,9 +650,9 @@ class LibraryViewModel @Inject constructor(
                             searchMatches = computed.searchMatches,
                             searchMatchesByCategory = computed.searchMatchesByCategory,
                             availableGenres = computed.availableGenres,
+                            availableTags = computed.availableTags,
                             availableFormats = computed.availableFormats,
                             availableAiringStatuses = computed.availableAiringStatuses,
-                            unfilteredTabCounts = computed.unfilteredTabCounts,
                             initialTabId = resolvedInitialTab ?: it.initialTabId,
                             isLoading = false,
                             errorMessage = null
@@ -650,11 +672,28 @@ class LibraryViewModel @Inject constructor(
     private fun refresh() {
         viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true) }
-            when (val result = libraryRepository.refreshLibrary("", _uiState.value.mediaType)) {
-                is Result.Success -> {} // Automatically updated via Flow
+            val type = _uiState.value.mediaType
+            when (val result = libraryRepository.refreshLibrary("", type)) {
+                is Result.Success -> syncTags(type)
                 is Result.Error -> showResultError(result)
             }
             _uiState.update { it.copy(isRefreshing = false) }
+        }
+    }
+
+    private var tagSyncJob: Job? = null
+
+    /**
+     * Tags come down on a request of their own rather than with the refresh, which they made two to
+     * three times slower. Nobody waits on them, so they go at background priority and a failure
+     * stays quiet until the next refresh tries again.
+     */
+    private fun syncTags(type: MediaType) {
+        if (tagSyncJob?.isActive == true) return
+        tagSyncJob = viewModelScope.launch {
+            withRequestPriority(RequestPriority.Background) {
+                libraryRepository.syncLibraryTags(type)
+            }
         }
     }
 

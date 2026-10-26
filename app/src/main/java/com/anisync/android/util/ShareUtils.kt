@@ -1,16 +1,21 @@
 package com.anisync.android.util
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.MediaStore
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import com.anisync.android.type.MediaType
@@ -113,9 +118,16 @@ object ShareUtils {
         clipboard.setPrimaryClip(ClipData.newPlainText("AniSync", text))
     }
 
+    /** True below API 29 until the user grants the storage access [saveCardToGallery] needs there. */
+    fun saveNeedsStoragePermission(context: Context): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
+            PackageManager.PERMISSION_GRANTED
+
     /**
      * Saves the captured card to the shared Pictures/AniSync gallery folder. Uses the scoped
-     * MediaStore pipeline on API 29+ (no permission needed) and the legacy insert below it.
+     * MediaStore pipeline on API 29+ (no permission needed). Below it the PNG goes straight to
+     * shared storage, which needs WRITE_EXTERNAL_STORAGE, and the media scanner indexes it.
      * Returns true on success.
      */
     suspend fun saveCardToGallery(context: Context, bitmap: ImageBitmap): Boolean =
@@ -142,9 +154,21 @@ object ShareUtils {
                     true
                 } else {
                     @Suppress("DEPRECATION")
-                    MediaStore.Images.Media.insertImage(
-                        context.contentResolver, bmp, name, "AniSync card"
-                    ) != null
+                    val dir = File(
+                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                        "AniSync"
+                    )
+                    if (!dir.isDirectory && !dir.mkdirs()) return@withContext false
+                    val file = File(dir, name)
+                    val written = file.outputStream().use { out ->
+                        bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
+                    }
+                    if (written) {
+                        MediaScannerConnection.scanFile(
+                            context, arrayOf(file.path), arrayOf("image/png"), null
+                        )
+                    }
+                    written
                 }
             } catch (_: Exception) {
                 false

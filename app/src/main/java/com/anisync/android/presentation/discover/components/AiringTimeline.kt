@@ -61,8 +61,12 @@ import java.util.Date
 
 private val CardWidth = 132.dp
 private val ItemGap = 12.dp
-private val AxisHeight = 12.dp
-private val NowMarkerWidth = 48.dp
+private val AxisHeight = 18.dp
+private val AxisDotSize = 8.dp
+private val AxisDotSpacing = 8.dp
+private val AxisLabelGap = AxisDotSpacing - (AxisHeight - AxisDotSize) / 2
+private val SpineThickness = 2.dp
+private val NowMarkerHeight = 18.dp
 private const val PosterAspect = 171f / 243f
 
 /**
@@ -91,7 +95,7 @@ fun AiringTimeline(
     val rowHeight = with(LocalDensity.current) {
         // Trailing 6dp is slack for the two-line title, which otherwise measures a hair over
         // two line heights and gets clamped to one.
-        AxisHeight + 6.dp + 16.dp + 8.dp + (CardWidth / PosterAspect) + 8.dp +
+        AxisHeight + AxisLabelGap + 16.dp + 8.dp + (CardWidth / PosterAspect) + 8.dp +
             20.sp.toDp() * 2 + 6.dp
     }
     // Index of the first episode still to come; the marker slots in just before it.
@@ -159,8 +163,8 @@ private fun BoxScope.Spine(elapsed: Boolean) {
         modifier = Modifier
             .align(Alignment.TopStart)
             .fillMaxWidth()
-            .padding(top = AxisHeight / 2 - 1.dp)
-            .height(2.dp)
+            .padding(top = (AxisHeight - SpineThickness) / 2)
+            .height(SpineThickness)
             .background(
                 if (elapsed) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.surfaceVariant
@@ -170,12 +174,12 @@ private fun BoxScope.Spine(elapsed: Boolean) {
 
 @Composable
 private fun NowMarker(height: Dp) {
-    Box(modifier = Modifier.width(NowMarkerWidth).height(height)) {
+    Box(modifier = Modifier.height(height).padding(horizontal = 6.dp)) {
         Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = 0.dp)
-                .height(AxisHeight + 6.dp)
+                .padding(top = (AxisHeight - NowMarkerHeight) / 2)
+                .height(NowMarkerHeight)
                 .clip(RoundedCornerShape(50))
                 .background(MaterialTheme.colorScheme.primary)
                 .padding(horizontal = 8.dp),
@@ -250,8 +254,8 @@ private fun AiringCard(
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .padding(top = AxisHeight / 2 - 4.dp)
-                        .size(8.dp)
+                        .padding(top = (AxisHeight - AxisDotSize) / 2)
+                        .size(AxisDotSize)
                         .clip(CircleShape)
                         .background(
                             if (aired) MaterialTheme.colorScheme.primary
@@ -259,7 +263,7 @@ private fun AiringCard(
                         )
                 )
             }
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(AxisLabelGap))
             Text(
                 text = timeText,
                 style = MaterialTheme.typography.labelSmall,

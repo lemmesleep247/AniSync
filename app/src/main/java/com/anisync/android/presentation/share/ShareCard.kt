@@ -1,8 +1,11 @@
 package com.anisync.android.presentation.share
 
+import android.Manifest
 import android.os.Build
 import android.view.WindowManager
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -45,10 +48,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
@@ -69,7 +72,6 @@ import coil3.compose.AsyncImage
 import com.anisync.android.R
 import com.anisync.android.ui.theme.ProvideDisplaySize
 import com.anisync.android.util.ShareUtils
-import dev.shreyaspatil.capturable.controller.rememberCaptureController
 import kotlinx.coroutines.launch
 
 /**
@@ -193,7 +195,6 @@ fun ShareImageSheet(
  * focusing the caption simply scrolls it into view). Shared verbatim by both presentation hosts,
  * which wrap it in their own scroll container.
  */
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun ShareCustomizerContent(
     onDismiss: () -> Unit,
@@ -209,7 +210,7 @@ private fun ShareCustomizerContent(
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
-    val controller = rememberCaptureController()
+    val cardLayer = rememberGraphicsLayer()
     var busy by remember { mutableStateOf(false) }
     var config by remember {
         mutableStateOf(ShareCardConfig(template = templates.firstOrNull() ?: ShareCardTemplate.STANDARD))
@@ -221,7 +222,7 @@ private fun ShareCustomizerContent(
         scope.launch {
             busy = true
             try {
-                block(controller.captureAsync().await())
+                block(cardLayer.toShareBitmap())
             } catch (_: Throwable) {
                 // Node left composition mid-capture — keep the sheet open for a retry.
             } finally {
@@ -230,12 +231,32 @@ private fun ShareCustomizerContent(
         }
     }
 
+    fun saveCard() = runAction { bmp ->
+        val ok = ShareUtils.saveCardToGallery(context, bmp)
+        if (ok) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        Toast.makeText(
+            context,
+            resources.getString(
+                if (ok) R.string.share_saved_to_gallery else R.string.share_save_failed
+            ),
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    val storageAccess = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            saveCard()
+        } else {
+            Toast.makeText(context, R.string.share_save_needs_storage, Toast.LENGTH_SHORT).show()
+        }
+    }
+
     // The caption baked onto the card also rides along as the shared text, above the link.
     val shareText = listOfNotNull(config.caption.trim().ifBlank { null }, link).joinToString("\n\n")
         .ifBlank { null }
 
     ShareCaptureArea(
-        controller = controller,
+        layer = cardLayer,
         config = config,
         seedColor = seedColor,
         maxPreviewHeight = previewMaxHeight,
@@ -276,16 +297,10 @@ private fun ShareCustomizerContent(
                     container = MaterialTheme.colorScheme.surfaceContainerHighest,
                     contentColor = MaterialTheme.colorScheme.onSurface
                 ) {
-                    runAction { bmp ->
-                        val ok = ShareUtils.saveCardToGallery(context, bmp)
-                        if (ok) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        Toast.makeText(
-                            context,
-                            resources.getString(
-                                if (ok) R.string.share_saved_to_gallery else R.string.share_save_failed
-                            ),
-                            Toast.LENGTH_SHORT
-                        ).show()
+                    if (ShareUtils.saveNeedsStoragePermission(context)) {
+                        storageAccess.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    } else {
+                        saveCard()
                     }
                 }
                 SheetAction(

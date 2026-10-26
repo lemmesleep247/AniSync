@@ -1,4 +1,4 @@
-package com.anisync.android.presentation.discover.components
+package com.anisync.android.presentation.components.filtersheet
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.combinedClickable
@@ -18,11 +18,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
+import com.anisync.android.R
 
 enum class TriState { OFF, INCLUDED, EXCLUDED }
+
+/** Where a tap moves a chip: off, included, excluded, then off again. */
+fun TriState.next(): TriState = when (this) {
+    TriState.OFF -> TriState.INCLUDED
+    TriState.INCLUDED -> TriState.EXCLUDED
+    TriState.EXCLUDED -> TriState.OFF
+}
+
+/** Where a long press moves a chip: straight to excluded, or back off when it already is. */
+fun TriState.longPressed(): TriState = if (this == TriState.EXCLUDED) TriState.OFF else TriState.EXCLUDED
 
 /**
  * Tri-state filter chip for genres and tags.
@@ -64,29 +76,19 @@ fun IncludeExcludeChip(
             border = null
         }
     }
-    val stateLabel = when (state) {
-        TriState.OFF -> "off"
-        TriState.INCLUDED -> "included"
-        TriState.EXCLUDED -> "excluded"
-    }
+    val stateLabel = stringResource(
+        when (state) {
+            TriState.OFF -> R.string.a11y_filter_off
+            TriState.INCLUDED -> R.string.a11y_filter_included
+            TriState.EXCLUDED -> R.string.a11y_filter_excluded
+        }
+    )
     Surface(
         modifier = modifier
             .semantics { stateDescription = stateLabel }
             .combinedClickable(
-                onClick = {
-                    onStateChange(
-                        when (state) {
-                            TriState.OFF -> TriState.INCLUDED
-                            TriState.INCLUDED -> TriState.EXCLUDED
-                            TriState.EXCLUDED -> TriState.OFF
-                        }
-                    )
-                },
-                onLongClick = {
-                    onStateChange(
-                        if (state == TriState.EXCLUDED) TriState.OFF else TriState.EXCLUDED
-                    )
-                }
+                onClick = { onStateChange(state.next()) },
+                onLongClick = { onStateChange(state.longPressed()) }
             ),
         color = container,
         contentColor = content,
@@ -119,4 +121,19 @@ fun IncludeExcludeChip(
             Text(text = label, style = MaterialTheme.typography.labelLarge)
         }
     }
+}
+
+/**
+ * The line over every set of [IncludeExcludeChip]s, saying how the chips cycle. Where something is
+ * already picked, [counts] leads it.
+ */
+@Composable
+fun IncludeExcludeHint(counts: String?, modifier: Modifier = Modifier) {
+    val hint = stringResource(R.string.library_filter_exclude_hint)
+    Text(
+        text = if (counts == null) hint else stringResource(R.string.filter_hint_with_counts, counts, hint),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier
+    )
 }

@@ -110,7 +110,7 @@ class CreateThreadViewModel @Inject constructor(
 
     /**
      * Toggles a forum category, enforcing AniList's rules:
-     * - Selecting a standalone category (Misc / AniList Apps / Bug Reports /
+     * - Selecting a standalone category (General / AniList Apps / Bug Reports /
      *   Site Feedback) replaces the whole selection — it can't be combined.
      *   AniList Apps additionally drops any attached media.
      * - Otherwise the selection is capped at [MAX_THREAD_CATEGORIES].
@@ -167,7 +167,7 @@ class CreateThreadViewModel @Inject constructor(
         val bodyBounds = ContentLimits.ThreadBody
 
         var hasError = false
-        val titleLength = state.title.trim().length
+        val titleLength = ContentLimits.characterCount(state.title.trim())
         if (titleLength < titleBounds.min) {
             _uiState.update {
                 it.copy(titleError = "Title must be at least ${titleBounds.min} characters")
@@ -179,8 +179,13 @@ class CreateThreadViewModel @Inject constructor(
             }
             hasError = true
         }
-        val bodyLength = state.body.length
-        if (bodyLength > bodyBounds.max) {
+        val bodyLength = ContentLimits.characterCount(state.body)
+        if (ContentLimits.characterCount(state.body.trim()) < bodyBounds.min) {
+            _uiState.update {
+                it.copy(bodyError = "Body must be at least ${bodyBounds.min} characters")
+            }
+            hasError = true
+        } else if (bodyLength > bodyBounds.max) {
             _uiState.update {
                 it.copy(bodyError = "Body must be at most ${bodyBounds.max} characters")
             }

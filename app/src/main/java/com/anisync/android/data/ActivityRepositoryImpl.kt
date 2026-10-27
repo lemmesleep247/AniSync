@@ -11,6 +11,7 @@ import com.anisync.android.SaveTextActivityMutation
 import com.anisync.android.ToggleActivityLikeMutation
 import com.anisync.android.ToggleActivityReplyLikeMutation
 import com.anisync.android.ToggleActivitySubscriptionMutation
+import com.anisync.android.data.mapper.toDomain
 import com.anisync.android.data.util.ApiError
 import com.anisync.android.data.util.safeApiCall
 import com.anisync.android.domain.ActivityDetail
@@ -18,8 +19,8 @@ import com.anisync.android.domain.ActivityReply
 import com.anisync.android.domain.ActivityRepository
 import com.anisync.android.domain.LikeState
 import com.anisync.android.domain.Result
+import com.anisync.android.domain.UserActivity
 import com.anisync.android.domain.UserSummary
-import com.anisync.android.util.AniListTextEncoder.encodeForAniList
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.Optional
 import com.apollographql.cache.normalized.FetchPolicy
@@ -60,7 +61,7 @@ class ActivityRepositoryImpl @Inject constructor(
                 SaveActivityReplyMutation(
                     id = if (id != null) Optional.present(id) else Optional.absent(),
                     activityId = activityId,
-                    text = encodeForAniList(text)
+                    text = text
                 )
             )
             .execute()
@@ -148,22 +149,20 @@ class ActivityRepositoryImpl @Inject constructor(
         Unit
     }
 
-    override suspend fun saveTextActivity(text: String, id: Int?): Result<Unit> = safeApiCall {
+    override suspend fun saveTextActivity(text: String, id: Int?): Result<UserActivity> = safeApiCall {
         val response = apolloClient
             .mutation(
                 SaveTextActivityMutation(
                     id = if (id != null) Optional.present(id) else Optional.absent(),
-                    text = encodeForAniList(text)
+                    text = text
                 )
             )
             .execute()
         if (response.hasErrors()) {
             throw Exception(response.errors?.firstOrNull()?.message ?: "Failed to post status")
         }
-        if (response.data?.SaveTextActivity?.id == null) {
-            throw Exception("Status was not posted")
-        }
-        Unit
+        response.data?.SaveTextActivity?.activityFields?.toDomain()
+            ?: throw Exception("Status was not posted")
     }
 
     override suspend fun saveMessageActivity(
@@ -171,13 +170,13 @@ class ActivityRepositoryImpl @Inject constructor(
         recipientId: Int,
         message: String,
         isPrivate: Boolean
-    ): Result<Unit> = safeApiCall {
+    ): Result<UserActivity> = safeApiCall {
         val response = apolloClient
             .mutation(
                 com.anisync.android.SaveMessageActivityMutation(
                     id = Optional.present(id),
                     recipientId = recipientId,
-                    message = encodeForAniList(message),
+                    message = message,
                     `private` = Optional.present(isPrivate)
                 )
             )
@@ -185,10 +184,8 @@ class ActivityRepositoryImpl @Inject constructor(
         if (response.hasErrors()) {
             throw Exception(response.errors?.firstOrNull()?.message ?: "Failed to update message")
         }
-        if (response.data?.SaveMessageActivity?.id == null) {
-            throw Exception("Message was not updated")
-        }
-        Unit
+        response.data?.SaveMessageActivity?.activityFields?.toDomain()
+            ?: throw Exception("Message was not updated")
     }
 
     override suspend fun toggleSubscription(activityId: Int, subscribe: Boolean): Result<Unit> = safeApiCall {

@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Library Tag Filters** - Library search can filter by tag, with the same picker as Search: a search box, categories, and spoiler tags kept shut until opened. A tag only counts above AniList's rank cut-off of 18, as it does in Search, and adult tags stay hidden unless adult content is on. Tags come down in the background on a request of their own, for new titles and once a week, so the library refresh is as quick as before. (#158)
+- **Jump Back** - Holding the back arrow lists the pages behind the one you are on, newest first, down to the tab you started from, and a tap on one goes straight there. The tab comes back as you left it. In a tablet's detail pane the list ends on the list the pane was opened from. A tip points it out a few times, and a switch under General turns it off. (#161)
+- **Weighted Score Explained** - Tapping the score on a title's page opens a sheet with the weighted and mean scores side by side, a short note on how AniList weights them, and a link to AniList's own explanation.
+- **Mutual Followers** - Social on a profile has a Mutual Followers tab beside Following and Followers, listing the people who follow that user back.
+- **Remove Followers** - On your own profile, each person under Social, Followers has a remove button on their picture, which asks before removing them from your followers.
+- **18+ Options** - With adult content on, the AniList options show the three switches AniList added under it: 18+ titles in search, 18+ titles in quick search, and other people's 18+ activity. Discover search follows the first, the title pickers in threads, recommendations and filters follow the second, and the feed and other people's profiles follow the third. Turning adult content on turns all three back on, as AniList does.
+- **Submission Updates** - Notifications say when AniList accepts, partly accepts or rejects a title, staff or character submission you made, with the reviewer's note, and they have a Submissions filter of their own.
 
 ### Changed
 
@@ -20,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Search Filters And Sort** - Both searches share one filter bar and one set of sheets: options two to a row, a Clear chip once something is filtered, and a button that shows how many titles are left. Sort is a column and a direction, so every column sorts both ways, and Best match joins while a query is typed. Discover's Type filter became the rail, Airing status has its own chip, and Season moved in with Year.
 - **Library Grid** - Cards show the year beside the format and keep both lines of a long title.
 - **Studios** - The Studios chip in Discover lists the most favourited studios straight away, and typing a name narrows them.
+- **Forum Categories** - Misc left the category rail, since AniList merged it into General, and the new Events category took its place. A thread filed under General stays in General alone, as on AniList, and Site Announcements is no longer offered when writing a thread. A forum last left on Misc opens on General.
+- **Weighted Score** - The score AniList used to call average is called weighted, on title pages, in the sort options and in the search filter, which was labelled mean score by mistake.
+- **Same Universe** - A related title set in the same universe says so, where it read Other before.
+- **Emoji** - Emoji in statuses, messages, replies, forum posts, reviews, bios and notes go to AniList as they are, now that it stores them, and every limit counts an emoji as one character, as AniList does. That makes a lone emoji too short for a reply or a message, as it is on the website.
+- **Keeping Up** - Your lists refresh in the background when AniSync comes back after ten minutes or more, and a title's page checks your entry with AniList each time it opens, so episodes and chapters logged on the website or in another app show up without a pull to refresh. (#165)
+- **Search Field** - Discover, Library and Forum search move the search field out of the way as the results scroll down and bring it back on the first scroll up, as the bar over Discover does. The filters and the rail stay on screen, and the keyboard closes as the field leaves.
 
 ### Fixed
 
@@ -28,6 +40,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Feed In Spanish** - The feed no longer closes when it groups a run of list updates while AniSync is in Spanish. Anywhere a translation lacks the wording for a count, the English wording shows instead, notifications included. (#160)
 - **Share Cards On Android 8** - A shared or saved card no longer comes out as diagonal streaks on phones whose graphics chip pads each row of the image. (#162)
 - **Saving Share Cards On Android 8 And 9** - Save asks for storage access the first time and puts the card in Pictures/AniSync as a PNG, as it does on newer versions. Before, it failed every time. (#163)
+- **Media Page App Bar** - Opening a title from a Library card no longer leaves the back arrow, favourite and share off the page until the card has finished growing into it.
+- **Seasonal Browse** - The Seasonal chip opens the season AniList is in, so December shows Fall instead of the Winter that ended in March. A season picked with a single year also takes in the shows that premiered the December before, as AniList counts them.
+- **Review Length** - A review needs 2600 characters without its formatting before it can be published, as AniList now asks, and the counter shows how far there is to go.
+- **Thread Body** - A new thread needs a body of at least 10 characters, which AniList requires, instead of failing when it is sent.
+- **List Notes** - Notes stop at 6000 characters and rewatches at 1000, the most AniList accepts.
+- **Scoring System** - Library scores switch to a new scoring system a few seconds after it is picked, where they kept the old numbers until the list was refreshed. Editing a score in between could save it on the wrong scale.
+- **Editing Entries** - The edit sheet, on a title's page or in the Library, opens on your entry as AniList has it. It could open on an older copy, missing progress and dates logged on the website or in another app since, and saving it sent that older progress back to AniList. A title on your list that the library had not loaded yet opened as a blank new entry, and saving that overwrote the real one. (#165)
+- **Switching Accounts** - A title's page no longer shows the previous account's status and progress on a title the new account has not added.
+- **Coming Back To The Feed** - Going back to the feed from an activity's replies, a profile or a title keeps your place. It used to swap everything loaded for the first page and drop you near the top. New activity goes on top for the pill to offer, and when more than a page of it came in, the pill reloads the feed instead. (#164)
+- **Coming Back To A Profile** - Going back to a profile keeps your place in its activity, social, reviews, stats and list tabs. After a minute on the page, coming back cut the paged lists to their first page and swapped the others for a spinner. Saving an edited status or message, in the feed or on a profile, updates it where it is instead of reloading the list, and a page you come back to below its tabs keeps them pinned at the top. (#164)
+- **Muted Notifications** - Notifications muted in the phone's settings stay silent when they stack. Once two or more were showing, the stack took the sound and settings of activity replies, whatever type they were. (#170)
+- **Search Rail** - Results in Discover and Library search stop a little short of the rail above them as they scroll, as they do under the rail on Discover, instead of running right up against it.
 
 ## [3.3.0] - 2026-10-20
 

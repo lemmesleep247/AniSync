@@ -13,10 +13,15 @@ import com.anisync.android.domain.UserActivity
 /**
  * Resolves the `isAdult` search filter. Returns `null` to leave the filter off (show everything),
  * `false` to hide 18+, or `true` to show only 18+. The per-search [mode] wins; when it is
- * [AdultMode.ANY] the global [showAdultContent] preference acts as a floor that hides adult media.
+ * [AdultMode.ANY] the global [showAdultContent] preference acts as a floor that hides adult media,
+ * and so does the account's choice to leave 18+ out of this kind of search ([includeByDefault]).
  */
-fun resolveAdultIsAdult(mode: AdultMode, showAdultContent: Boolean): Boolean? = when (mode) {
-    AdultMode.ANY -> if (showAdultContent) null else false
+fun resolveAdultIsAdult(
+    mode: AdultMode,
+    showAdultContent: Boolean,
+    includeByDefault: Boolean = true,
+): Boolean? = when (mode) {
+    AdultMode.ANY -> if (showAdultContent && includeByDefault) null else false
     AdultMode.HIDE -> false
     AdultMode.ONLY -> true
 }
@@ -36,8 +41,14 @@ fun AniListStaffNameLanguage.toLocalStaffNameLanguage(): StaffNameLanguage = whe
 }
 
 /**
- * Drops activity for 18+ media when adult content is off, matching the AniList website. Text and
- * message activities carry no media (so [UserActivity.mediaIsAdult] is false) and always pass.
+ * Drops other people's activity for 18+ media unless the account shows adult content and their 18+
+ * activity, matching the AniList website. The viewer's own activity always passes, and so do text
+ * and message activities, which carry no media (so [UserActivity.mediaIsAdult] is false).
  */
-fun List<UserActivity>.filterAdultActivities(showAdultContent: Boolean): List<UserActivity> =
-    if (showAdultContent) this else filterNot { it.mediaIsAdult }
+fun List<UserActivity>.filterAdultActivities(
+    showAdultContent: Boolean,
+    showOthersAdultActivity: Boolean = true,
+    viewerId: Int? = null,
+): List<UserActivity> =
+    if (showAdultContent && showOthersAdultActivity) this
+    else filterNot { it.mediaIsAdult && (viewerId == null || it.userId != viewerId) }

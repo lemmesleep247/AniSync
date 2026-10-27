@@ -334,7 +334,9 @@ fragment ActivityFields on ActivityUnion {
   }
 }
 
-query GetUserActivities($userId: Int) {
+# AniList answers messengerId with an empty list for anyone but the viewer, so the sent page is
+# only asked for on the viewer's own profile.
+query GetUserActivities($userId: Int, $isViewer: Boolean = false) {
   allActivities: Page(perPage: 50) {
     activities(userId: $userId, sort: [PINNED, ID_DESC], type_in: [ANIME_LIST, MANGA_LIST, TEXT, MESSAGE]) {
       ...ActivityFields
@@ -350,7 +352,7 @@ query GetUserActivities($userId: Int) {
       ...ActivityFields
     }
   }
-  messageSent: Page(perPage: 20) {
+  messageSent: Page(perPage: 20) @include(if: $isViewer) {
     activities(messengerId: $userId, sort: [ID_DESC], type_in: [MESSAGE]) {
       ...ActivityFields
     }
@@ -404,6 +406,19 @@ query GetUserSocialData($userId: Int!, $page: Int = 1) {
       total
     }
     followers(userId: $userId) {
+      id
+      name
+      avatar {
+        large
+      }
+    }
+  }
+  mutuals: Page(page: $page, perPage: 25) {
+    pageInfo {
+      hasNextPage
+      total
+    }
+    mutualFollowers(userId: $userId) {
       id
       name
       avatar {
@@ -532,6 +547,12 @@ mutation ToggleUserFollow($userId: Int!) {
   }
 }
 
+mutation RemoveFollower($userId: Int!) {
+  DeleteFollower(userId: $userId) {
+    id
+  }
+}
+
 mutation SaveMessageActivity(
   $id: Int,
   $recipientId: Int!,
@@ -545,6 +566,7 @@ mutation SaveMessageActivity(
     private: $private
   ) {
     id
+    ...ActivityFields
   }
 }
 

@@ -40,11 +40,18 @@ class SearchRepositoryImpl @Inject constructor(
      * Resolves the `isAdult` query filter. The per-search [AdultMode] chip takes precedence; when it
      * is [AdultMode.ANY] (the default) the global "show adult content" preference acts as a floor, so
      * a user with adult content off never sees 18+ results unless they explicitly ask for them via
-     * the chip. This is the fix for the previously-inert toggle.
+     * the chip. This is the fix for the previously-inert toggle. AniList's account also says whether
+     * search and quick search take in 18+ titles by default, and leaves applying that to each app.
      */
-    private fun resolveAdultFilter(mode: com.anisync.android.domain.AdultMode): Optional<Boolean?> =
-        resolveAdultIsAdult(mode, appSettings.showAdultContent.value)
+    private fun resolveAdultFilter(
+        mode: com.anisync.android.domain.AdultMode,
+        quickSearch: Boolean,
+    ): Optional<Boolean?> {
+        val includeByDefault =
+            if (quickSearch) appSettings.adultInQuickSearch.value else appSettings.adultInSearch.value
+        return resolveAdultIsAdult(mode, appSettings.showAdultContent.value, includeByDefault)
             ?.let { Optional.present(it) } ?: Optional.absent()
+    }
 
     private fun SearchFilters.sortFor(type: MediaType, query: String): MediaSort =
         sort.toMediaSort(type, appSettings.titleLanguage.value, hasQuery = query.isNotBlank())
@@ -80,14 +87,13 @@ class SearchRepositoryImpl @Inject constructor(
                     format_in = filters.formats.toOptionalList(),
                     status_in = filters.statuses.toOptionalList(),
                     source_in = filters.sources.toOptionalList(),
-                    startDate_greater = filters.yearRange.min?.let { Optional.present(it * 10000 + 101) }
-                        ?: Optional.absent(),
-                    startDate_lesser = filters.yearRange.max?.let { Optional.present(it * 10000 + 1231) }
-                        ?: Optional.absent(),
+                    startDate_greater = filters.startDateFloor(),
+                    startDate_lesser = filters.startDateCeiling(),
                     season = filters.season?.let { Optional.present(it) } ?: Optional.absent(),
-                    averageScore = filters.score.exact(),
-                    averageScore_greater = filters.score.greater(),
-                    averageScore_lesser = filters.score.lesser(),
+                    seasonYear = filters.seasonYear()?.let { Optional.present(it) } ?: Optional.absent(),
+                    weightedScore = filters.score.exact(),
+                    weightedScore_greater = filters.score.greater(),
+                    weightedScore_lesser = filters.score.lesser(),
                     episodes = filters.episodes.exact(),
                     episodes_greater = filters.episodes.greater(),
                     episodes_lesser = filters.episodes.lesser(),
@@ -96,7 +102,7 @@ class SearchRepositoryImpl @Inject constructor(
                     chapters_lesser = filters.chapters.lesser(),
                     countryOfOrigin = filters.country?.let { Optional.present(it.code) }
                         ?: Optional.absent(),
-                    isAdult = resolveAdultFilter(filters.adultMode)
+                    isAdult = resolveAdultFilter(filters.adultMode, quickSearch = true)
                 )
             )
                 .fetchPolicy(FetchPolicy.NetworkOnly)
@@ -207,14 +213,13 @@ class SearchRepositoryImpl @Inject constructor(
                         format_in = filters.formats.toOptionalList(),
                         status_in = filters.statuses.toOptionalList(),
                         source_in = filters.sources.toOptionalList(),
-                        startDate_greater = filters.yearRange.min?.let { Optional.present(it * 10000 + 101) }
-                            ?: Optional.absent(),
-                        startDate_lesser = filters.yearRange.max?.let { Optional.present(it * 10000 + 1231) }
-                            ?: Optional.absent(),
+                        startDate_greater = filters.startDateFloor(),
+                        startDate_lesser = filters.startDateCeiling(),
                         season = filters.season?.let { Optional.present(it) } ?: Optional.absent(),
-                        averageScore = filters.score.exact(),
-                        averageScore_greater = filters.score.greater(),
-                        averageScore_lesser = filters.score.lesser(),
+                        seasonYear = filters.seasonYear()?.let { Optional.present(it) } ?: Optional.absent(),
+                        weightedScore = filters.score.exact(),
+                        weightedScore_greater = filters.score.greater(),
+                        weightedScore_lesser = filters.score.lesser(),
                         episodes = filters.episodes.exact(),
                         episodes_greater = filters.episodes.greater(),
                         episodes_lesser = filters.episodes.lesser(),
@@ -223,7 +228,7 @@ class SearchRepositoryImpl @Inject constructor(
                         chapters_lesser = filters.chapters.lesser(),
                         countryOfOrigin = filters.country?.let { Optional.present(it.code) }
                             ?: Optional.absent(),
-                        isAdult = resolveAdultFilter(filters.adultMode)
+                        isAdult = resolveAdultFilter(filters.adultMode, quickSearch = false)
                     )
                 )
                     .fetchPolicy(FetchPolicy.NetworkFirst)
@@ -382,6 +387,21 @@ class SearchRepositoryImpl @Inject constructor(
 
     private fun <T> Set<T>.toOptionalList(): Optional<List<T?>?> =
         if (isEmpty()) Optional.absent() else Optional.present(this.toList())
+
+    /**
+     * A season picked with a single year goes out as AniList's seasonYear, which counts a late
+     * December premiere into the Winter after it. A start date range would leave it out.
+     */
+    private fun SearchFilters.seasonYear(): Int? =
+        yearRange.min?.takeIf { season != null && it == yearRange.max }
+
+    private fun SearchFilters.startDateFloor(): Optional<Int?> =
+        yearRange.min?.takeIf { seasonYear() == null }?.let { Optional.present(it * 10000 + 101) }
+            ?: Optional.absent()
+
+    private fun SearchFilters.startDateCeiling(): Optional<Int?> =
+        yearRange.max?.takeIf { seasonYear() == null }?.let { Optional.present(it * 10000 + 1231) }
+            ?: Optional.absent()
 
     /**
      * AniList's `*_greater` / `*_lesser` filters are strict, so "X or more"

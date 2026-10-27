@@ -65,6 +65,8 @@ fun NotificationsScreen(
     onUserClick: (String) -> Unit,
     onActivityClick: (Int) -> Unit,
     onThreadClick: (threadId: Int, commentId: Int?) -> Unit,
+    onStaffClick: (Int) -> Unit,
+    onCharacterClick: (Int) -> Unit,
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier,
     // The target open in the two-pane detail (or null); the matching notification card shows the ring.
@@ -97,6 +99,8 @@ fun NotificationsScreen(
             onUserClick = onUserClick,
             onActivityClick = onActivityClick,
             onThreadClick = onThreadClick,
+            onStaffClick = onStaffClick,
+            onCharacterClick = onCharacterClick,
             selectedTarget = selectedTarget,
             isUnread = entry.isUnread,
             onOpened = { viewModel.onAction(NotificationsAction.MarkRead(entry.key)) }
@@ -345,4 +349,5 @@ private fun NotificationFilter.labelRes(): Int = when (this) {
     NotificationFilter.FORUM -> R.string.notifications_filter_forum
     NotificationFilter.FOLLOWS -> R.string.notifications_filter_follows
     NotificationFilter.MEDIA -> R.string.notifications_filter_media
+    NotificationFilter.SUBMISSIONS -> R.string.notifications_filter_submissions
 }

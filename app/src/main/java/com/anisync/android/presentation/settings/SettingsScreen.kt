@@ -415,8 +415,9 @@ private fun categoryBadge(key: String, active: Set<WhatsNewItem>): (@Composable 
     }
     if (leaf != null && leaf in active) return { WhatsNewPill(leaf.kind) }
     val inside = when (key) {
-        "general" -> listOf(WhatsNewItem.GENERAL_MOVED_NOTICE)
+        "general" -> listOf(WhatsNewItem.GENERAL_MOVED_NOTICE, WhatsNewItem.GENERAL_BACK_TRAIL)
         "storage" -> listOf(WhatsNewItem.STORAGE_COVER_QUALITY)
+        "anilist" -> listOf(WhatsNewItem.ANILIST_ADULT_OPTIONS)
         else -> emptyList()
     }
     return if (inside.any { it in active }) ({ WhatsNewDot() }) else null

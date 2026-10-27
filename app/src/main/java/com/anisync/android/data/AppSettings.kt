@@ -250,6 +250,10 @@ class AppSettings @Inject constructor(
         MutableStateFlow(prefs.getBoolean(KEY_NAV_BAR_DOUBLE_TAP_SEARCH, true))
     val navBarDoubleTapSearch: StateFlow<Boolean> = _navBarDoubleTapSearch.asStateFlow()
 
+    // Whether holding a back arrow opens the trail of pages behind it. Off, a long press is a tap.
+    private val _backTrailEnabled = MutableStateFlow(prefs.getBoolean(KEY_BACK_TRAIL, true))
+    val backTrailEnabled: StateFlow<Boolean> = _backTrailEnabled.asStateFlow()
+
     private fun readNavBarStyle(): NavBarStyle {
         val name = runCatching { prefs.getString(KEY_NAV_BAR_STYLE, null) }.getOrNull()
         return runCatching { NavBarStyle.valueOf(name ?: NavBarStyle.ANCHORED.name) }
@@ -400,6 +404,16 @@ class AppSettings @Inject constructor(
         prefs.getBoolean(KEY_SHOW_ADULT_CONTENT, false)
     )
     val showAdultContent: StateFlow<Boolean> = _showAdultContent.asStateFlow()
+
+    // AniList's 18+ sub-options, mirrored the same way. They only count while adult content is on.
+    private val _adultInSearch = MutableStateFlow(prefs.getBoolean(KEY_ADULT_IN_SEARCH, true))
+    val adultInSearch: StateFlow<Boolean> = _adultInSearch.asStateFlow()
+
+    private val _adultInQuickSearch = MutableStateFlow(prefs.getBoolean(KEY_ADULT_IN_QUICK_SEARCH, true))
+    val adultInQuickSearch: StateFlow<Boolean> = _adultInQuickSearch.asStateFlow()
+
+    private val _othersAdultActivity = MutableStateFlow(prefs.getBoolean(KEY_OTHERS_ADULT_ACTIVITY, true))
+    val othersAdultActivity: StateFlow<Boolean> = _othersAdultActivity.asStateFlow()
 
     /**
      * Discover's rail order, per media type. The two tabs do not carry the same set (the airing
@@ -570,8 +584,9 @@ class AppSettings @Inject constructor(
     private val _forumFeed = MutableStateFlow(prefs.getString(KEY_FORUM_FEED, null))
     val forumFeed: StateFlow<String?> = _forumFeed.asStateFlow()
 
+    // AniList merged Misc (17) into General (7), so a stored Misc would open an empty feed.
     private val _forumCategoryId = MutableStateFlow(
-        prefs.getInt(KEY_FORUM_CATEGORY_ID, -1).takeIf { it >= 0 }
+        prefs.getInt(KEY_FORUM_CATEGORY_ID, -1).takeIf { it >= 0 }?.let { if (it == 17) 7 else it }
     )
     val forumCategoryId: StateFlow<Int?> = _forumCategoryId.asStateFlow()
 
@@ -758,6 +773,30 @@ class AppSettings @Inject constructor(
     }
 
     // ==========================================================================
+    // BACK TRAIL TIPS: three at most between them, and none once the trail is used
+    // ==========================================================================
+
+    /** Whether a back arrow may still point at its long press. */
+    fun backTrailTipsAllowed(): Boolean =
+        prefs.getInt(KEY_BACK_TRAIL_TIPS_SHOWN, 0) < MAX_BACK_TRAIL_TIPS &&
+            !prefs.getBoolean(KEY_BACK_TRAIL_OPENED, false)
+
+    /** Whether the tip for the first long chain has had its one showing. */
+    fun backTrailFirstTipShown(): Boolean = prefs.getBoolean(KEY_BACK_TRAIL_FIRST_TIP, false)
+
+    fun noteBackTrailTip(first: Boolean) {
+        val editor = prefs.edit()
+            .putInt(KEY_BACK_TRAIL_TIPS_SHOWN, prefs.getInt(KEY_BACK_TRAIL_TIPS_SHOWN, 0) + 1)
+        if (first) editor.putBoolean(KEY_BACK_TRAIL_FIRST_TIP, true)
+        editor.apply()
+    }
+
+    fun noteBackTrailOpened() {
+        if (prefs.getBoolean(KEY_BACK_TRAIL_OPENED, false)) return
+        prefs.edit().putBoolean(KEY_BACK_TRAIL_OPENED, true).apply()
+    }
+
+    // ==========================================================================
     // SUPPORT CARD — the tip nudge shown once after an update
     // ==========================================================================
 
@@ -880,6 +919,11 @@ class AppSettings @Inject constructor(
     fun setNavBarDoubleTapSearch(enabled: Boolean) {
         _navBarDoubleTapSearch.value = enabled
         prefs.edit().putBoolean(KEY_NAV_BAR_DOUBLE_TAP_SEARCH, enabled).apply()
+    }
+
+    fun setBackTrailEnabled(enabled: Boolean) {
+        _backTrailEnabled.value = enabled
+        prefs.edit().putBoolean(KEY_BACK_TRAIL, enabled).apply()
     }
     
     /**
@@ -1081,6 +1125,17 @@ class AppSettings @Inject constructor(
     fun setShowAdultContent(show: Boolean) {
         _showAdultContent.value = show
         prefs.edit().putBoolean(KEY_SHOW_ADULT_CONTENT, show).apply()
+    }
+
+    fun setAdultSubOptions(inSearch: Boolean, inQuickSearch: Boolean, othersActivity: Boolean) {
+        _adultInSearch.value = inSearch
+        _adultInQuickSearch.value = inQuickSearch
+        _othersAdultActivity.value = othersActivity
+        prefs.edit()
+            .putBoolean(KEY_ADULT_IN_SEARCH, inSearch)
+            .putBoolean(KEY_ADULT_IN_QUICK_SEARCH, inQuickSearch)
+            .putBoolean(KEY_OTHERS_ADULT_ACTIVITY, othersActivity)
+            .apply()
     }
 
     fun setDiscoverSearchViewMode(mode: DiscoverViewMode) {
@@ -1375,6 +1430,7 @@ companion object {
         private const val KEY_NAV_BAR_LABELS = "nav_bar_show_labels"
         private const val KEY_NAV_BAR_CORNER_RADIUS = "nav_bar_corner_radius"
         private const val KEY_NAV_BAR_DOUBLE_TAP_SEARCH = "nav_bar_double_tap_search"
+        private const val KEY_BACK_TRAIL = "back_trail"
 
         const val MIN_NAV_BAR_CORNER_RADIUS = 0f
         const val MAX_NAV_BAR_CORNER_RADIUS = 36f
@@ -1403,6 +1459,10 @@ companion object {
         private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
         private const val KEY_ONBOARDING_STARTED = "onboarding_started"
         private const val KEY_LAST_SEEN_VERSION_CODE = "last_seen_version_code"
+        private const val KEY_BACK_TRAIL_TIPS_SHOWN = "back_trail_tips_shown"
+        private const val KEY_BACK_TRAIL_FIRST_TIP = "back_trail_first_tip_shown"
+        private const val KEY_BACK_TRAIL_OPENED = "back_trail_opened"
+        private const val MAX_BACK_TRAIL_TIPS = 3
 
         private const val KEY_NOTIFICATIONS_ENABLED = "notifications_enabled"
         private const val KEY_TITLE_LANGUAGE = "title_language"
@@ -1429,6 +1489,9 @@ companion object {
         private const val KEY_USER_SCORE_FORMAT = "user_score_format"
         private const val KEY_SHOW_PRIVATE_ENTRIES = "show_private_entries"
         private const val KEY_SHOW_ADULT_CONTENT = "show_adult_content"
+        private const val KEY_ADULT_IN_SEARCH = "adult_in_search"
+        private const val KEY_ADULT_IN_QUICK_SEARCH = "adult_in_quick_search"
+        private const val KEY_OTHERS_ADULT_ACTIVITY = "others_adult_activity"
         private const val KEY_STAFF_NAME_LANGUAGE = "staff_name_language"
         private const val KEY_DISCOVER_SEARCH_VIEW_MODE = "discover_search_view_mode"
         private const val KEY_LAST_SELECTED_ANIME_TAB = "last_selected_anime_tab"

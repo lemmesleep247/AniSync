@@ -13,14 +13,15 @@ import com.anisync.android.domain.ConflictState
 import com.anisync.android.domain.LocalOptionsState
 import com.anisync.android.domain.Result
 import com.anisync.android.domain.ScoreFormat
-import com.anisync.android.domain.UserOptionField
 import com.anisync.android.domain.UserOptionsPatch
 import com.anisync.android.domain.UserOptionsRepository
-import com.anisync.android.domain.applyPatch
-import com.anisync.android.domain.affectedFields
-import com.anisync.android.domain.differingFields
+import com.anisync.android.domain.acknowledged
+import com.anisync.android.domain.edited
 import com.anisync.android.domain.patchForFields
+import com.anisync.android.domain.pushBatches
+import com.anisync.android.domain.reconciledWith
 import com.anisync.android.domain.takeFields
+import com.anisync.android.worker.LibrarySyncWorker
 import com.anisync.android.worker.UserOptionsFlushWorker
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.Optional
@@ -44,6 +45,7 @@ import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 import com.anisync.android.type.MediaListStatus as ApiListStatus
+import com.anisync.android.type.MediaType
 import com.anisync.android.type.ScoreFormat as ApiScoreFormat
 import com.anisync.android.type.UserStaffNameLanguage as ApiStaffNameLanguage
 import com.anisync.android.type.UserTitleLanguage as ApiTitleLanguage
@@ -96,45 +98,16 @@ class UserOptionsRepositoryImpl @Inject constructor(
         reconcile(accountId, fresh)
     }
 
-    /**
-     * Merge a fresh server snapshot into local state. Clean (non-dirty) fields adopt the server value;
-     * a dirty field whose server value changed since our baseline becomes a conflict (local value is
-     * kept until the user resolves it).
-     */
     private fun reconcile(accountId: Int, fresh: AniListUserOptions) {
-        val current = _state.value ?: LocalOptionsState()
-        val all = UserOptionField.entries.toSet()
-        // Dirty edits still genuinely pending: the local value disagrees with the fresh server value.
-        // A dirty field the server already agrees with isn't pending (and isn't a conflict).
-        val pending = current.dirty intersect current.local.differingFields(fresh)
-        // A conflict is a pending edit where the server also moved since our baseline.
-        val conflictFields = pending intersect current.serverSnapshot.differingFields(fresh)
-        // Everything not pending adopts the server value (clean fields + converged dirty edits).
-        val adopt = all - pending
-
-        commit(
-            accountId,
-            current.copy(
-                local = current.local.takeFields(adopt, fresh),
-                // Baseline advances to the server everywhere except unresolved conflicts.
-                serverSnapshot = current.serverSnapshot.takeFields(all - conflictFields, fresh),
-                dirty = pending,
-                conflict = if (conflictFields.isNotEmpty()) ConflictState(conflictFields, fresh) else null,
-            ),
-        )
+        commit(accountId, (_state.value ?: LocalOptionsState()).reconciledWith(fresh))
     }
 
     override fun applyEdit(patch: UserOptionsPatch) {
         val accountId = currentAccountId() ?: return
-        val current = _state.value ?: LocalOptionsState()
-        commit(
-            accountId,
-            current.copy(
-                local = current.local.applyPatch(patch),
-                dirty = current.dirty + patch.affectedFields(),
-            ),
-        )
-        scheduleFlush()
+        commit(accountId, (_state.value ?: LocalOptionsState()).edited(patch))
+        // The library shows every score in the scoring system, and AniList only converts them once the
+        // new one reaches it, so that change goes out without waiting.
+        scheduleFlush(immediate = patch.scoreFormat != null)
     }
 
     override suspend fun flush() {
@@ -150,26 +123,27 @@ class UserOptionsRepositoryImpl @Inject constructor(
             val pushFields = state.dirty - (state.conflict?.fields ?: emptySet())
             if (pushFields.isEmpty()) return
 
-            val patch = state.local.patchForFields(pushFields)
-            // Through safeApiCall like everything else: classification throws now, and this was the
-            // one call left that let an ApiError out. The gate refusing a background push is
-            // temporary, but it reached the worker as a thrown exception, which WorkManager turns
-            // into a permanent failure rather than a retry.
-            val push = safeApiCall {
-                val response = apolloClient.mutation(patch.toMutation()).execute()
-                if (response.hasErrors()) throw Exception(response.errors?.firstOrNull()?.message)
-                response.data?.UpdateUser?.toDomain() ?: throw Exception("No options came back")
-            }
-            // keep dirty; a later flush retries
-            val updated = (push as? Result.Success)?.data ?: return
+            for (batch in state.local.pushBatches(pushFields)) {
+                val sent = _state.value ?: return
+                // The answer to the first request can already hold what the second was going to send.
+                val fields = batch intersect sent.dirty
+                if (fields.isEmpty()) continue
+                val patch = sent.local.patchForFields(fields)
+                // Through safeApiCall like everything else: classification throws now, and this was the
+                // one call left that let an ApiError out. The gate refusing a background push is
+                // temporary, but it reached the worker as a thrown exception, which WorkManager turns
+                // into a permanent failure rather than a retry.
+                val push = safeApiCall {
+                    val response = apolloClient.mutation(patch.toMutation()).execute()
+                    if (response.hasErrors()) throw Exception(response.errors?.firstOrNull()?.message)
+                    response.data?.UpdateUser?.toDomain() ?: throw Exception("No options came back")
+                }
+                // keep dirty; a later flush retries
+                val updated = (push as? Result.Success)?.data ?: return
 
-            commit(
-                accountId,
-                state.copy(
-                    serverSnapshot = state.serverSnapshot.takeFields(pushFields, updated),
-                    dirty = state.dirty - pushFields,
-                ),
-            )
+                val now = _state.value ?: return
+                commit(accountId, now.acknowledged(fields, sent.local, updated))
+            }
         }
     }
 
@@ -199,16 +173,24 @@ class UserOptionsRepositoryImpl @Inject constructor(
 
     /** Persist, publish, and mirror behavior-affecting values into [AppSettings]. */
     private fun commit(accountId: Int, state: LocalOptionsState) {
+        val before = _state.value?.serverSnapshot?.scoreFormat
         store.write(accountId, state)
         _state.value = state
         mirror(state.local)
+        // AniList has converted every list score to the new scoring system, so the stored ones are stale.
+        if (before != null && before != state.serverSnapshot.scoreFormat) {
+            LibrarySyncWorker.resync(context, MediaType.ANIME)
+            LibrarySyncWorker.resync(context, MediaType.MANGA)
+        }
     }
 
-    private fun scheduleFlush() {
+    private fun scheduleFlush(immediate: Boolean = false) {
         debounceJob?.cancel()
         debounceJob = scope.launch {
-            delay(FLUSH_DEBOUNCE_MS)
-            flush()
+            if (!immediate) delay(FLUSH_DEBOUNCE_MS)
+            // Launched beside the debounce rather than inside it, so an edit made while a push is out
+            // restarts the wait without cancelling a request AniList may already have applied.
+            scope.launch { flush() }
         }
         // Safety net: survives process death and waits for connectivity.
         UserOptionsFlushWorker.enqueue(context)
@@ -217,6 +199,11 @@ class UserOptionsRepositoryImpl @Inject constructor(
     /** The options that drive local app behavior always follow the local working copy. */
     private fun mirror(local: AniListUserOptions) {
         appSettings.setShowAdultContent(local.displayAdultContent)
+        appSettings.setAdultSubOptions(
+            inSearch = local.includeAdultContentInSearch,
+            inQuickSearch = local.includeAdultContentInQuickSearch,
+            othersActivity = local.displayAdultActivities,
+        )
         local.titleLanguage?.let { appSettings.setTitleLanguage(it.toLocalTitleLanguage()) }
         local.staffNameLanguage?.let { appSettings.setStaffNameLanguage(it.toLocalStaffNameLanguage()) }
         local.scoreFormat?.let { appSettings.setUserScoreFormat(it) }
@@ -229,6 +216,9 @@ class UserOptionsRepositoryImpl @Inject constructor(
     private fun GetViewerQuery.Viewer.toDomain(): AniListUserOptions = buildOptions(
         titleLanguage = options?.titleLanguage,
         displayAdultContent = options?.displayAdultContent,
+        includeAdultContentInSearch = options?.includeAdultContentInSearch,
+        includeAdultContentInQuickSearch = options?.includeAdultContentInQuickSearch,
+        displayAdultActivities = options?.displayAdultActivities,
         airingNotifications = options?.airingNotifications,
         profileColor = options?.profileColor,
         timezone = options?.timezone,
@@ -242,6 +232,9 @@ class UserOptionsRepositoryImpl @Inject constructor(
     private fun UpdateUserOptionsMutation.UpdateUser.toDomain(): AniListUserOptions = buildOptions(
         titleLanguage = options?.titleLanguage,
         displayAdultContent = options?.displayAdultContent,
+        includeAdultContentInSearch = options?.includeAdultContentInSearch,
+        includeAdultContentInQuickSearch = options?.includeAdultContentInQuickSearch,
+        displayAdultActivities = options?.displayAdultActivities,
         airingNotifications = options?.airingNotifications,
         profileColor = options?.profileColor,
         timezone = options?.timezone,
@@ -255,6 +248,9 @@ class UserOptionsRepositoryImpl @Inject constructor(
     private fun buildOptions(
         titleLanguage: ApiTitleLanguage?,
         displayAdultContent: Boolean?,
+        includeAdultContentInSearch: Boolean?,
+        includeAdultContentInQuickSearch: Boolean?,
+        displayAdultActivities: Boolean?,
         airingNotifications: Boolean?,
         profileColor: String?,
         timezone: String?,
@@ -266,6 +262,9 @@ class UserOptionsRepositoryImpl @Inject constructor(
     ): AniListUserOptions = AniListUserOptions(
         titleLanguage = titleLanguage.toDomain(),
         displayAdultContent = displayAdultContent ?: false,
+        includeAdultContentInSearch = includeAdultContentInSearch ?: true,
+        includeAdultContentInQuickSearch = includeAdultContentInQuickSearch ?: true,
+        displayAdultActivities = displayAdultActivities ?: true,
         airingNotifications = airingNotifications ?: true,
         profileColor = profileColor,
         timezone = timezone,
@@ -281,6 +280,9 @@ class UserOptionsRepositoryImpl @Inject constructor(
 
     private fun UserOptionsPatch.toMutation(): UpdateUserOptionsMutation = UpdateUserOptionsMutation(
         displayAdultContent = displayAdultContent.toOptional(),
+        includeAdultContentInSearch = includeAdultContentInSearch.toOptional(),
+        includeAdultContentInQuickSearch = includeAdultContentInQuickSearch.toOptional(),
+        displayAdultActivities = displayAdultActivities.toOptional(),
         titleLanguage = (titleLanguage?.toApi()).toOptional(),
         staffNameLanguage = (staffNameLanguage?.toApi()).toOptional(),
         scoreFormat = (scoreFormat?.toApi()).toOptional(),

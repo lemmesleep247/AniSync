@@ -8,7 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.anisync.android.data.AppSettings
 import com.anisync.android.data.local.dao.LibraryDao
-import com.anisync.android.data.local.toDomain
+import com.anisync.android.data.local.entity.LibraryEntryEntity
 import com.anisync.android.domain.DetailsRepository
 import com.anisync.android.domain.ForumRepository
 import com.anisync.android.domain.ForumThread
@@ -144,11 +144,11 @@ class MediaDetailsViewModel @Inject constructor(
     }
 
     /**
-     * Observe media details from local cache, with the viewer's note overlaid from their library
-     * entry. The library row is the source of truth for notes (it's what the editor writes and what
-     * sync keeps fresh), whereas the separately-cached media_details row can predate the note or lag
-     * an edit — so reading the note from there would leave it blank until a manual refresh. Pulling it
-     * from the library makes it appear immediately and update the instant it's edited.
+     * Observe media details from local cache, with the viewer's entry overlaid from their library.
+     * The library row is what the edit sheet opens on and what every write lands in first, and each
+     * details fetch brings it up to date, whereas the media_details copy only moves when the title
+     * itself is refetched. Reading status and progress from that copy let the tracker show one
+     * version of the entry while the edit sheet opened on another.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     val uiState: StateFlow<DetailsUiState> = combine(
@@ -159,11 +159,8 @@ class MediaDetailsViewModel @Inject constructor(
     ) { details, libraryEntry ->
         when {
             details == null -> DetailsUiState.Loading // No cached data yet, still loading
-            // In the library → the library note is authoritative (blank/null means no note). Only
-            // fall back to the media_details copy when the entry isn't cached for this account.
-            libraryEntry != null -> DetailsUiState.Success(
-                details.copy(listNotes = libraryEntry.notes?.takeIf { it.isNotBlank() })
-            )
+            // Only fall back to the media_details copy when the entry isn't cached for this account.
+            libraryEntry != null -> DetailsUiState.Success(details.withListEntry(libraryEntry))
             else -> DetailsUiState.Success(details)
         }
     }
@@ -198,19 +195,27 @@ class MediaDetailsViewModel @Inject constructor(
      */
     private fun refreshIfStale() {
         viewModelScope.launch {
-            var attempts = 0
-            while (true) {
-                val result = detailsRepository.refreshMediaDetailsIfStale(mediaId)
-                // Only a rate limit says when it will be worth asking again. Anything else is left
-                // alone, and anything already cached is on screen regardless.
-                val waitSeconds = (result as? Result.Error)?.countdownSeconds
-                if (waitSeconds == null || waitSeconds <= 0) return@launch
-                if (++attempts > MAX_RATE_LIMIT_RETRIES) return@launch
-                // The skeleton is the honest state while AniList is refusing requests. What it must
-                // not do is stay there once the wait is over, which is what happened when this
-                // dropped the failure and nobody ever asked again.
-                delay(waitSeconds * 1_000 + RETRY_GRACE_MS)
+            refreshMediaIfStale()
+            // Nobody is waiting on this, the page already shows the library's copy.
+            withRequestPriority(RequestPriority.Prefetch) {
+                detailsRepository.refreshListEntryIfStale(mediaId)
             }
+        }
+    }
+
+    private suspend fun refreshMediaIfStale() {
+        var attempts = 0
+        while (true) {
+            val result = detailsRepository.refreshMediaDetailsIfStale(mediaId)
+            // Only a rate limit says when it will be worth asking again. Anything else is left
+            // alone, and anything already cached is on screen regardless.
+            val waitSeconds = (result as? Result.Error)?.countdownSeconds
+            if (waitSeconds == null || waitSeconds <= 0) return
+            if (++attempts > MAX_RATE_LIMIT_RETRIES) return
+            // The skeleton is the honest state while AniList is refusing requests. What it must
+            // not do is stay there once the wait is over, which is what happened when this
+            // dropped the failure and nobody ever asked again.
+            delay(waitSeconds * 1_000 + RETRY_GRACE_MS)
         }
     }
 
@@ -370,9 +375,19 @@ class MediaDetailsViewModel @Inject constructor(
     fun openEditSheet() {
         viewModelScope.launch {
             val details = (uiState.value as? DetailsUiState.Success)?.details ?: return@launch
-            
-            val existingEntry = libraryDao.getEntry(accountStore.activeAccount.value?.id ?: -1, mediaId)
-            val draft = existingEntry?.toDomain() ?: LibraryEntry(
+
+            var existingEntry = libraryRepository.getEntry(mediaId)
+            if (existingEntry == null && details.listEntryId != null) {
+                // On the list with no library row to edit. A blank draft would save over the real
+                // entry, so fetch it first, which writes the row.
+                val result = detailsRepository.refreshMediaDetails(mediaId)
+                if (result is Result.Error) {
+                    toastManager.showResultError(result)
+                    return@launch
+                }
+                existingEntry = libraryRepository.getEntry(mediaId)
+            }
+            val draft = existingEntry ?: LibraryEntry(
                 id = 0,
                 mediaId = details.id,
                 titleRomaji = details.titleRomaji,
@@ -701,6 +716,15 @@ class MediaDetailsViewModel @Inject constructor(
         }
     }
 }
+
+private fun MediaDetails.withListEntry(entry: LibraryEntryEntity) = copy(
+    listEntryId = entry.id,
+    listStatus = entry.status,
+    listProgress = entry.progress,
+    listNotes = entry.notes?.takeIf { it.isNotBlank() },
+    listEntryPrivate = entry.isPrivate,
+    listEntryHiddenFromStatusLists = entry.hiddenFromStatusLists
+)
 
 /**
  * Paging state for the full Cast / Staff See-all grids. [items] is the running,

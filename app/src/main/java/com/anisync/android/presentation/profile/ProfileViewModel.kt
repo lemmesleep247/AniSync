@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.anisync.android.R
 import com.anisync.android.data.AppSettings
 import com.anisync.android.data.NotificationBadgeStore
+import com.anisync.android.data.filterAdultActivities
 import com.anisync.android.domain.ActivityRepository
 import com.anisync.android.domain.AnimeStatistics
 import com.anisync.android.domain.CachePolicy
@@ -155,7 +156,8 @@ class ProfileViewModel @Inject constructor(
         val isFollowerOfViewer: Boolean = false,
         val isFollowLoading: Boolean = false,
         val editingActivity: com.anisync.android.domain.UserActivity? = null,
-        val isSavingActivityEdit: Boolean = false
+        val isSavingActivityEdit: Boolean = false,
+        val followerToRemove: com.anisync.android.domain.SocialUser? = null
     )
 
     private val localState = MutableStateFlow(ProfileUiLocalState())
@@ -164,15 +166,18 @@ class ProfileViewModel @Inject constructor(
         val isSocialLoading: Boolean = false,
         val socialFollowing: List<com.anisync.android.domain.SocialUser> = emptyList(),
         val socialFollowers: List<com.anisync.android.domain.SocialUser> = emptyList(),
+        val socialMutuals: List<com.anisync.android.domain.SocialUser> = emptyList(),
         val socialThreads: List<com.anisync.android.domain.ForumThread> = emptyList(),
         val socialComments: List<com.anisync.android.domain.SocialThreadComment> = emptyList(),
         val socialErrorMessage: String? = null,
         val followingTotal: Int? = null,
         val followersTotal: Int? = null,
+        val mutualsTotal: Int? = null,
         val hasFetchedSocialData: Boolean = false,
         val socialPage: Int = 1,
         val followingHasNextPage: Boolean = false,
         val followersHasNextPage: Boolean = false,
+        val mutualsHasNextPage: Boolean = false,
         val threadsHasNextPage: Boolean = false,
         val commentsHasNextPage: Boolean = false,
         val isSocialPaginating: Boolean = false
@@ -281,6 +286,10 @@ class ProfileViewModel @Inject constructor(
     // Optimistically-deleted activity ids hidden from the UI until confirmed.
     private val deletedActivityIds = MutableStateFlow<Set<Int>>(emptySet())
 
+    // Text of activities edited here, as AniList saved it: activityId -> saved copy.
+    private val editedActivities =
+        MutableStateFlow<Map<Int, com.anisync.android.domain.UserActivity>>(emptyMap())
+
     private val viewerIdFlow = MutableStateFlow<Int?>(null)
 
     private val targetUsername: String? = savedStateHandle.get<String>("username")
@@ -369,7 +378,7 @@ class ProfileViewModel @Inject constructor(
     /**
      * Bumped when the Profile tab is reselected, asking the page to scroll back to the top.
      * Kept beside [uiState] rather than inside it: that state is assembled by a wide combine
-     * whose arguments are read back by index, and a fourteenth flow buys nothing here.
+     * whose arguments are read back by index, and one more flow buys nothing here.
      */
     val scrollToTopRequest: StateFlow<Long> = _scrollToTopRequest.asStateFlow()
 
@@ -380,6 +389,9 @@ class ProfileViewModel @Inject constructor(
             onScrollToTop = { _scrollToTopRequest.update { current -> current + 1 } }
         )
     }
+
+    private val adultActivityOptions =
+        combine(appSettings.showAdultContent, appSettings.othersAdultActivity, ::Pair)
 
     val uiState: StateFlow<ProfileUiState> = combine(
         profileState,
@@ -394,7 +406,9 @@ class ProfileViewModel @Inject constructor(
         viewerIdFlow,
         notificationBadgeStore.unreadCount,
         favoritesState,
-        activityPaginationState
+        activityPaginationState,
+        adultActivityOptions,
+        editedActivities
     ) { params ->
         val remote = params[0] as ProfileUiState
         val local = params[1] as ProfileUiLocalState
@@ -412,6 +426,10 @@ class ProfileViewModel @Inject constructor(
         val unreadCount = params[10] as Int
         val favoritesOverlay = params[11] as FavoritesState
         val pagination = params[12] as ActivityPaginationState
+        @Suppress("UNCHECKED_CAST")
+        val (showAdultContent, showOthersAdultActivity) = params[13] as Pair<Boolean, Boolean>
+        @Suppress("UNCHECKED_CAST")
+        val edited = params[14] as Map<Int, com.anisync.android.domain.UserActivity>
 
         // Fold lazily-loaded older activity pages into the profile's initial feed
         // (deduped, newest-first) before overlays apply, so a like/subscribe/delete
@@ -430,7 +448,8 @@ class ProfileViewModel @Inject constructor(
         }
 
         val needsOverlay = mergedRemote.profile != null &&
-            (subOverrides.isNotEmpty() || likeOverrides.isNotEmpty() || deletedIds.isNotEmpty())
+            (subOverrides.isNotEmpty() || likeOverrides.isNotEmpty() || deletedIds.isNotEmpty() ||
+                edited.isNotEmpty())
         val remoteWithOverrides = if (!needsOverlay) {
             mergedRemote
         } else {
@@ -440,6 +459,7 @@ class ProfileViewModel @Inject constructor(
                 .filterNot { deletedIds.contains(it.id) }
                 .map { a ->
                     var next = a
+                    edited[a.id]?.let { e -> next = next.copy(text = e.text, bodyMarkdown = e.bodyMarkdown) }
                     subOverrides[a.id]?.let { sub -> next = next.copy(isSubscribed = sub) }
                     likeOverrides[a.id]?.let { (liked, count) ->
                         next = next.copy(isLiked = liked, likeCount = count)
@@ -450,13 +470,27 @@ class ProfileViewModel @Inject constructor(
             mergedRemote.copy(profile = profile.copy(activities = patched))
         }
 
+        // AniList leaves the 18+ activity options to each app, so other people's 18+ list updates
+        // are dropped here, where a change to the setting applies without a refetch.
+        val visible = remoteWithOverrides.profile?.let { p ->
+            remoteWithOverrides.copy(
+                profile = p.copy(
+                    activities = p.activities.filterAdultActivities(
+                        showAdultContent = showAdultContent,
+                        showOthersAdultActivity = showOthersAdultActivity,
+                        viewerId = viewerId,
+                    )
+                )
+            )
+        } ?: remoteWithOverrides
+
         // Swap in the lazily-loaded full favourite-anime list once available; until then the page-1
         // preview carried by the profile fetch stands.
         val withFavorites = favoritesOverlay.fullAnime?.let { full ->
-            remoteWithOverrides.profile?.let { p ->
-                remoteWithOverrides.copy(profile = p.copy(favoriteAnime = full))
+            visible.profile?.let { p ->
+                visible.copy(profile = p.copy(favoriteAnime = full))
             }
-        } ?: remoteWithOverrides
+        } ?: visible
 
         withFavorites.copy(
             isRefreshing = local.isRefreshing,
@@ -479,16 +513,20 @@ class ProfileViewModel @Inject constructor(
             messageSentEvent = local.messageSentEvent,
             editingActivity = local.editingActivity,
             isSavingActivityEdit = local.isSavingActivityEdit,
+            followerToRemove = local.followerToRemove,
             socialFollowing = social.socialFollowing,
             socialFollowers = social.socialFollowers,
+            socialMutuals = social.socialMutuals,
             socialThreads = social.socialThreads,
             socialComments = social.socialComments,
             isSocialLoading = social.isSocialLoading,
             socialErrorMessage = social.socialErrorMessage,
             followingTotal = social.followingTotal,
             followersTotal = social.followersTotal,
+            mutualsTotal = social.mutualsTotal,
             followingHasNextPage = social.followingHasNextPage,
             followersHasNextPage = social.followersHasNextPage,
+            mutualsHasNextPage = social.mutualsHasNextPage,
             threadsHasNextPage = social.threadsHasNextPage,
             commentsHasNextPage = social.commentsHasNextPage,
             isSocialPaginating = social.isSocialPaginating,
@@ -669,6 +707,11 @@ class ProfileViewModel @Inject constructor(
 
             is ProfileAction.LoadMoreActivities -> loadMoreActivities()
             is ProfileAction.LoadMoreSocial -> loadMoreSocial()
+            is ProfileAction.AskToRemoveFollower ->
+                localState.update { it.copy(followerToRemove = action.follower) }
+            is ProfileAction.DismissRemoveFollower ->
+                localState.update { it.copy(followerToRemove = null) }
+            is ProfileAction.ConfirmRemoveFollower -> removeFollower()
             is ProfileAction.LoadMoreReviews -> loadMoreReviews()
             is ProfileAction.ToggleActivitySubscription -> toggleActivitySubscription(action.activityId)
             is ProfileAction.ToggleActivityLike -> toggleActivityLike(action.activityId)
@@ -721,7 +764,9 @@ class ProfileViewModel @Inject constructor(
                     localState.update {
                         it.copy(isSavingActivityEdit = false, editingActivity = null)
                     }
-                    refresh()
+                    // Patched in place. A refresh for it cut the activity list back to its first
+                    // batch, and the edited activity went with it when it sat further down.
+                    editedActivities.update { it + (result.data.id to result.data) }
                 }
                 is Result.Error -> {
                     localState.update { it.copy(isSavingActivityEdit = false) }
@@ -818,7 +863,9 @@ class ProfileViewModel @Inject constructor(
         // A refresh replaces the activity seed with a fresh page 1, so drop any
         // lazily-loaded older pages — they'd misalign or duplicate atop the new seed.
         // Keep the active filter so pagination keeps paging that type's stream.
-        seedActivityPagination(localState.value.selectedActivityFilter)
+        // The soft refresh on resume keeps them. It reads back the cached seed they
+        // follow, and the reader it lands under may be pages deep (#164).
+        if (forceNetwork) seedActivityPagination(localState.value.selectedActivityFilter)
 
         viewModelScope.launch {
             Trace.beginSection("AniSync.Profile.Refresh.Total")
@@ -850,8 +897,10 @@ class ProfileViewModel @Inject constructor(
                     val s = SystemClock.elapsedRealtime()
                     try {
                         when (selectedTab) {
-                            ProfileTab.SOCIAL -> fetchSocialData(forceRefresh = true)
-                            ProfileTab.REVIEWS -> fetchReviews(forceRefresh = true)
+                            // Social and reviews come in pages, and reloading one cuts it back to
+                            // page 1. A soft refresh only fills in a list that has not loaded (#164).
+                            ProfileTab.SOCIAL -> fetchSocialData(forceRefresh = forceNetwork)
+                            ProfileTab.REVIEWS -> fetchReviews(forceRefresh = forceNetwork)
                             ProfileTab.STATS -> fetchStats(forceRefresh = true)
                             // The heatmap rides the stats payload. An explicit pull forces the
                             // network (like the other tabs); a soft refresh stays network-first
@@ -1517,14 +1566,17 @@ class ProfileViewModel @Inject constructor(
                             isSocialLoading = false,
                             socialFollowing = page.data.following,
                             socialFollowers = page.data.followers,
+                            socialMutuals = page.data.mutuals,
                             socialThreads = page.data.threads,
                             socialComments = page.data.comments,
                             hasFetchedSocialData = true,
                             socialPage = 1,
                             followingTotal = page.followingTotal,
                             followersTotal = page.followersTotal,
+                            mutualsTotal = page.mutualsTotal,
                             followingHasNextPage = page.followingHasNextPage,
                             followersHasNextPage = page.followersHasNextPage,
+                            mutualsHasNextPage = page.mutualsHasNextPage,
                             threadsHasNextPage = page.threadsHasNextPage,
                             commentsHasNextPage = page.commentsHasNextPage
                         )
@@ -1549,6 +1601,7 @@ class ProfileViewModel @Inject constructor(
         val hasNext = when (activeTab) {
             ProfileSocialTab.FOLLOWING -> current.followingHasNextPage
             ProfileSocialTab.FOLLOWERS -> current.followersHasNextPage
+            ProfileSocialTab.MUTUALS -> current.mutualsHasNextPage
             ProfileSocialTab.FORUM_THREADS -> current.threadsHasNextPage
             ProfileSocialTab.FORUM_COMMENTS -> current.commentsHasNextPage
         }
@@ -1575,12 +1628,15 @@ class ProfileViewModel @Inject constructor(
                             // index-keyed rows but are deduped too to avoid showing twice.
                             socialFollowing = (it.socialFollowing + p.data.following).distinctBy { u -> u.id },
                             socialFollowers = (it.socialFollowers + p.data.followers).distinctBy { u -> u.id },
+                            socialMutuals = (it.socialMutuals + p.data.mutuals).distinctBy { u -> u.id },
                             socialThreads = (it.socialThreads + p.data.threads).distinctBy { t -> t.id },
                             socialComments = (it.socialComments + p.data.comments).distinctBy { c -> c.id },
                             followingTotal = p.followingTotal ?: it.followingTotal,
                             followersTotal = p.followersTotal ?: it.followersTotal,
+                            mutualsTotal = p.mutualsTotal ?: it.mutualsTotal,
                             followingHasNextPage = p.followingHasNextPage,
                             followersHasNextPage = p.followersHasNextPage,
+                            mutualsHasNextPage = p.mutualsHasNextPage,
                             threadsHasNextPage = p.threadsHasNextPage,
                             commentsHasNextPage = p.commentsHasNextPage
                         )
@@ -1589,6 +1645,29 @@ class ProfileViewModel @Inject constructor(
                 is Result.Error -> {
                     socialState.update { it.copy(isSocialPaginating = false) }
                 }
+            }
+        }
+    }
+
+    private fun removeFollower() {
+        val follower = localState.value.followerToRemove ?: return
+        localState.update { it.copy(followerToRemove = null) }
+        viewModelScope.launch {
+            when (val result = profileRepository.removeFollower(follower.id)) {
+                is Result.Success -> socialState.update { social ->
+                    val wasMutual = social.socialMutuals.any { it.id == follower.id }
+                    social.copy(
+                        socialFollowers = social.socialFollowers.filterNot { it.id == follower.id },
+                        socialMutuals = social.socialMutuals.filterNot { it.id == follower.id },
+                        followersTotal = social.followersTotal?.minus(1)?.coerceAtLeast(0),
+                        mutualsTotal = if (wasMutual) {
+                            social.mutualsTotal?.minus(1)?.coerceAtLeast(0)
+                        } else {
+                            social.mutualsTotal
+                        }
+                    )
+                }
+                is Result.Error -> toastManager.showResultError(result)
             }
         }
     }

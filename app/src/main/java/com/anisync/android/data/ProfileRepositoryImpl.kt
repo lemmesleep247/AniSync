@@ -1,5 +1,6 @@
 package com.anisync.android.data
 
+import com.anisync.android.RemoveFollowerMutation
 import com.anisync.android.data.util.InflightTracker
 import com.anisync.android.GetFullUserProfileQuery
 import com.anisync.android.GetUserActivitiesQuery
@@ -24,7 +25,6 @@ import com.anisync.android.domain.ProfileRefreshTimings
 import com.anisync.android.domain.ProfileRepository
 import com.anisync.android.domain.Result
 import com.anisync.android.domain.UserProfile
-import com.anisync.android.util.AniListTextEncoder.encodeForAniList
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.Optional
 import com.apollographql.cache.normalized.FetchPolicy
@@ -194,7 +194,12 @@ class ProfileRepositoryImpl @Inject constructor(
             val rawActivities = mutableListOf<com.anisync.android.fragment.ActivityFields>()
             Trace.beginSection("AniSync.Profile.Query.UserActivities")
             val activitiesResponse = try {
-                apolloClient.query(GetUserActivitiesQuery(userId = Optional.present(user.id)))
+                apolloClient.query(
+                    GetUserActivitiesQuery(
+                        userId = Optional.present(user.id),
+                        isViewer = Optional.present(user.id == accountStore.activeAccount.value?.id)
+                    )
+                )
                     .fetchPolicy(policy)
                     .execute()
             } finally {
@@ -371,7 +376,7 @@ class ProfileRepositoryImpl @Inject constructor(
     override suspend fun updateAbout(about: String): Result<Unit> {
         return safeApiCall {
             val response = apolloClient.mutation(
-                com.anisync.android.UpdateAboutMutation(about = Optional.present(encodeForAniList(about)))
+                com.anisync.android.UpdateAboutMutation(about = Optional.present(about))
             ).execute()
 
             if (response.hasErrors()) {
@@ -548,6 +553,14 @@ class ProfileRepositoryImpl @Inject constructor(
                 )
             } ?: emptyList()
 
+            val mutuals = data.mutuals?.mutualFollowers?.filterNotNull()?.map {
+                com.anisync.android.domain.SocialUser(
+                    id = it.id,
+                    name = it.name,
+                    avatarUrl = it.avatar?.large
+                )
+            } ?: emptyList()
+
             val threads = data.threads?.threads?.filterNotNull()?.map { thread ->
                 com.anisync.android.domain.ForumThread(
                     id = thread.id,
@@ -600,13 +613,16 @@ class ProfileRepositoryImpl @Inject constructor(
                 data = com.anisync.android.domain.UserSocialData(
                     following = following,
                     followers = followers,
+                    mutuals = mutuals,
                     threads = threads,
                     comments = comments
                 ),
                 followingTotal = data.following?.pageInfo?.total,
                 followersTotal = data.followers?.pageInfo?.total,
+                mutualsTotal = data.mutuals?.pageInfo?.total,
                 followingHasNextPage = data.following?.pageInfo?.hasNextPage == true,
                 followersHasNextPage = data.followers?.pageInfo?.hasNextPage == true,
+                mutualsHasNextPage = data.mutuals?.pageInfo?.hasNextPage == true,
                 threadsHasNextPage = data.threads?.pageInfo?.hasNextPage == true,
                 commentsHasNextPage = data.comments?.pageInfo?.hasNextPage == true
             )
@@ -641,6 +657,16 @@ class ProfileRepositoryImpl @Inject constructor(
             }
 
             response.data?.ToggleFollow?.isFollowing ?: false
+        }
+    }
+
+    override suspend fun removeFollower(userId: Int): Result<Unit> {
+        return safeApiCall {
+            val response = apolloClient.mutation(RemoveFollowerMutation(userId = userId)).execute()
+            response.exception?.let { throw it }
+            if (response.hasErrors()) {
+                throw Exception(response.errors?.firstOrNull()?.message ?: "Failed to remove follower")
+            }
         }
     }
 
@@ -866,7 +892,7 @@ class ProfileRepositoryImpl @Inject constructor(
                 com.anisync.android.SaveMessageActivityMutation(
                     id = if (id != null) Optional.present(id) else Optional.absent(),
                     recipientId = recipientId,
-                    message = encodeForAniList(message),
+                    message = message,
                     `private` = Optional.present(isPrivate)
                 )
             ).execute()

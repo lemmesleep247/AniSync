@@ -59,10 +59,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.anisync.android.R
+import com.anisync.android.data.WhatsNewItem
 import com.anisync.android.domain.UserProfile
 import com.anisync.android.presentation.components.SegmentedTabGroup
 import com.anisync.android.presentation.components.CustomPullToRefreshIndicator
+import com.anisync.android.presentation.components.WhatsNewDot
 import com.anisync.android.presentation.components.alert.rememberRateLimitedRefresh
+import com.anisync.android.presentation.components.rememberActiveWhatsNew
 import com.anisync.android.presentation.details.components.ReviewDetailsSheet
 import com.anisync.android.presentation.profile.components.DirectMessageInputSheet
 import com.anisync.android.presentation.profile.components.ProfileBioSheet
@@ -167,7 +170,15 @@ fun ProfileContent(
     val dockPx = with(LocalDensity.current) { statusBarInset.roundToPx() }.toFloat()
     var contentTopWindow by remember { mutableFloatStateOf(0f) }
     var inlineTabsTopWindow by remember { mutableFloatStateOf(Float.MAX_VALUE) }
-    val tabsDocked by remember { derivedStateOf { inlineTabsTopWindow <= contentTopWindow + dockPx } }
+    val listState = rememberLazyListState()
+    ScrollToTopOnRequest(scrollToTopRequest, listState)
+    // Coming back to the page below the tabs never lays the in-list strip out, so its top is never
+    // measured and the pinned copy goes by the list's position instead.
+    val tabsDocked by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 1 || inlineTabsTopWindow <= contentTopWindow + dockPx
+        }
+    }
 
     PullToRefreshBox(
         isRefreshing = uiState.isRefreshing,
@@ -186,9 +197,6 @@ fun ProfileContent(
             )
         }
     ) {
-    val listState = rememberLazyListState()
-    ScrollToTopOnRequest(scrollToTopRequest, listState)
-
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
@@ -477,6 +485,11 @@ internal fun LazyListScope.profileSelectedTabContent(
                 onThreadClick = onThreadClick,
                 onCommentClick = onCommentClick,
                 onLoadMore = { onAction(ProfileAction.LoadMoreSocial) },
+                onRemoveFollower = if (uiState.viewerId == profile.id) {
+                    { onAction(ProfileAction.AskToRemoveFollower(it)) }
+                } else {
+                    null
+                },
                 userColumns = portraitColumns
             )
         }
@@ -620,12 +633,14 @@ internal fun ProfileTabsButtonGroup(
     onTabSelected: (ProfileTab) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val mutualsNew = WhatsNewItem.PROFILE_MUTUALS in rememberActiveWhatsNew()
     SegmentedTabGroup(
         options = ProfileTab.entries,
         selected = selectedTab,
         onSelect = onTabSelected,
         label = { stringResource(it.titleRes) },
         modifier = modifier.padding(vertical = 8.dp),
-        icon = ::profileTabIcon
+        icon = ::profileTabIcon,
+        badge = { tab -> if (tab == ProfileTab.SOCIAL && mutualsNew) ({ WhatsNewDot() }) else null }
     )
 }

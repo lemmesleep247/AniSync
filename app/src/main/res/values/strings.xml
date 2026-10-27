@@ -124,6 +124,7 @@
     <string name="forum_category_forum_games">Forum Games</string>
     <string name="forum_category_misc">Misc</string>
     <string name="forum_category_anilist_apps">AniList Apps</string>
+    <string name="forum_category_events">Events</string>
     <!-- Forum sort and filter -->
     <string name="forum_sort_and_filter">Sort &amp; filter</string>
     <string name="forum_sort_by">Sort by</string>
@@ -325,7 +326,7 @@
     <string name="sort_release_date">Release date</string>
     <string name="sort_default">Default</string>
     <string name="sort_popularity">Popularity</string>
-    <string name="sort_average_score">Average Score</string>
+    <string name="sort_average_score">Weighted Score</string>
     <string name="sort_favorites">Favorites</string>
     <string name="sort_newest">Newest</string>
     <string name="sort_oldest">Oldest</string>
@@ -458,6 +459,12 @@
     <string name="setting_haptic_description">Vibrate on touch interactions</string>
     <string name="setting_score_on_complete">Ask for a score when finishing</string>
     <string name="setting_score_on_complete_desc">When a title on your list moves to Completed. Adding a new title as Completed never asks.</string>
+    <string name="setting_adult_in_search">Include 18+ in search</string>
+    <string name="setting_adult_in_search_desc">Discover search shows 18+ titles unless a filter leaves them out</string>
+    <string name="setting_adult_in_quick_search">Include 18+ in quick search</string>
+    <string name="setting_adult_in_quick_search_desc">The title pickers in threads, recommendations and forum and review filters</string>
+    <string name="setting_others_adult_activity">Show others\' 18+ activity</string>
+    <string name="setting_others_adult_activity_desc">Other people\'s list updates for 18+ titles, in the feed and on their profiles</string>
     <string name="setting_app_icon">App icon</string>
     <string name="setting_app_icon_desc">The new icon appears once you leave the app. A shortcut pinned to the home screen may need adding again.</string>
     <string name="app_icon_ink">Ink</string>
@@ -793,6 +800,7 @@
     <string name="notifications_filter_forum">Forum</string>
     <string name="notifications_filter_follows">Follows</string>
     <string name="notifications_filter_media">Media</string>
+    <string name="notifications_filter_submissions">Submissions</string>
     <string name="notifications_open">Open notifications</string>
     <string name="notifications_unread_overflow_a11y">More than 999 unread notifications</string>
     <string name="notifications_unread_indicator_a11y">New notifications</string>
@@ -832,8 +840,15 @@
     <string name="details_next_episode_in">Episode %1$d airs in %2$s</string>
     <string name="details_trailer">Trailer</string>
     <string name="details_duration_minutes">%1$d min</string>
-    <string name="details_score_average">avg</string>
-    <string name="details_score_average_ranked">avg · #%1$d all-time</string>
+    <string name="details_score_average">weighted</string>
+    <string name="details_score_average_ranked">weighted · #%1$d all-time</string>
+    <string name="details_score_info_title">Scores</string>
+    <string name="details_score_info_weighted">Weighted score</string>
+    <string name="details_score_info_mean">Mean score</string>
+    <string name="details_score_info_body">AniList weights each title\'s mean score by how many people rated it, so a handful of high ratings can\'t lift a title above ones rated by thousands. The weighted score rises toward the mean as more ratings come in, and never goes above it.</string>
+    <string name="details_score_info_threshold">Titles with fewer than 50 ratings have no weighted score yet. Light novels and one-shots need 35.</string>
+    <string name="details_score_info_read_more">Read AniList\'s explanation</string>
+    <string name="a11y_score_info">About the weighted score</string>
     <string name="cd_change_list_status">Change list status</string>
     <!-- Media details Stats tab -->
     <string name="media_stats_rankings">Rankings</string>
@@ -864,6 +879,12 @@
     <string name="profile_activity_lists">Lists</string>
     <string name="profile_social_following">Following</string>
     <string name="profile_social_followers">Followers</string>
+    <string name="profile_social_mutuals">Mutual Followers</string>
+    <string name="profile_remove_follower_title">Remove follower?</string>
+    <string name="profile_remove_follower_body">%1$s will no longer follow you.</string>
+    <string name="profile_remove_follower_confirm">Remove</string>
+    <string name="a11y_remove_follower">Remove follower</string>
+    <string name="a11y_remove_follower_named">Remove %1$s from your followers</string>
     <string name="profile_social_forum_threads">Forum Threads</string>
     <string name="profile_social_forum_comments">Forum Comments</string>
     <string name="profile_view_biography">View Biography</string>
@@ -1411,7 +1432,7 @@
     <string name="review_delete">Delete review</string>
     <string name="review_delete_confirm_title">Delete review?</string>
     <string name="review_delete_confirm_body">This permanently deletes your review. This cannot be undone.</string>
-    <string name="review_body_error">Review must be at least %1$d characters long. Do not pad your reviews to meet this requirement.</string>
+    <string name="review_body_error">Review must be at least %1$d characters long, excluding formatting. Do not pad your reviews to meet this requirement.</string>
     <string name="review_summary_error">Summary must be between %1$d and %2$d characters.</string>
     <string name="review_score_error">Score must be between %1$d and %2$d.</string>
     <string name="review_guidelines_notice">Please make sure to read the review guidelines before publishing.</string>
@@ -2110,6 +2131,8 @@
     <string name="notifications_item_media_merged_fallback">Entries</string>
     <string name="notifications_item_media_merged_target">another entry</string>
     <string name="notifications_item_media_deleted">%1$s was removed from the site</string>
+    <string name="notifications_item_submission_status">Your submission was %1$s</string>
+    <string name="notifications_item_submission_fallback">Your submission</string>
     <string name="notifications_item_unknown">New notification</string>
     <!-- Top alert toast -->
     <string name="alert_rate_limit_notice">Slowing down to stay within AniList\'s rate limit…</string>
@@ -2184,7 +2207,7 @@
     <string name="filter_more_title">More filters</string>
     <string name="filter_source">Source</string>
     <string name="filter_country">Country</string>
-    <string name="filter_mean_score">Mean score</string>
+    <string name="filter_mean_score">Weighted score</string>
     <string name="filter_episodes">Episodes</string>
     <string name="filter_chapters">Chapters</string>
     <string name="filter_adult_content">Adult content</string>
@@ -2297,6 +2320,12 @@
     <string name="a11y_nav_search_tab">Search %1$s</string>
     <string name="settings_nav_double_tap_search">Double-tap to search</string>
     <string name="settings_nav_double_tap_search_desc">Tap a tab twice to open its search. Tapping the tab you are on scrolls it back to the top</string>
+    <string name="settings_back_trail">Hold back to jump</string>
+    <string name="settings_back_trail_desc">Hold the back arrow to see the pages behind this one and jump straight to any of them</string>
+    <string name="a11y_back_trail">Show the pages behind this one</string>
+    <string name="back_trail_tip">Hold to jump back to any page</string>
+    <!-- %1$s is the name of a tab, like Discover or Library -->
+    <string name="back_trail_tip_tab">Hold to jump straight to %1$s</string>
     <string name="settings_general">General</string>
     <string name="settings_general_desc">Start screen, language, app lock, streaming</string>
     <string name="settings_section_opening">Opening the app</string>

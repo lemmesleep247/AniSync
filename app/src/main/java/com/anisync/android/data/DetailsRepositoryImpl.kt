@@ -10,18 +10,23 @@ import com.anisync.android.GetStaffCharactersPageQuery
 import com.anisync.android.GetStaffDetailsQuery
 import com.anisync.android.GetStaffProductionPageQuery
 import com.anisync.android.GetStudioDetailsQuery
+import com.anisync.android.GetViewerListEntryQuery
 import com.anisync.android.SaveMediaListEntryMutation
 import com.anisync.android.ToggleFavouriteMutation
 import com.anisync.android.data.local.dao.LibraryDao
 import com.anisync.android.data.local.dao.MediaDetailsDao
+import com.anisync.android.data.local.entity.LibraryEntryEntity
 import com.anisync.android.data.local.toDomain
 import com.anisync.android.data.local.toEntity
+import com.anisync.android.data.mapper.mapFuzzyDateToLong
 import com.anisync.android.data.mapper.toApiStatus
 import com.anisync.android.data.mapper.toDomainStatus
 import com.anisync.android.data.mapper.todayUtcMillis
+import com.anisync.android.data.util.dataOrThrow
 import com.anisync.android.data.util.safeApiCall
 import com.anisync.android.fragment.StaffProductionMediaFields
 import com.anisync.android.fragment.StaffVoicedCharacterFields
+import com.anisync.android.fragment.ViewerListEntryFields
 import com.anisync.android.domain.CharacterDetails
 import com.anisync.android.domain.CharacterInfo
 import com.anisync.android.domain.CharacterMedia
@@ -30,6 +35,7 @@ import com.anisync.android.domain.CoverImage
 import com.anisync.android.domain.DetailsRepository
 import com.anisync.android.domain.ExternalLink
 import com.anisync.android.domain.ExternalLinkType
+import com.anisync.android.domain.LibraryEntry
 import com.anisync.android.domain.LibraryStatus
 import com.anisync.android.domain.MediaDetails
 import com.anisync.android.domain.MediaAiringTrend
@@ -55,11 +61,11 @@ import com.anisync.android.domain.Trailer
 import com.anisync.android.domain.VoiceActor
 import com.anisync.android.domain.VoicedCharacter
 import com.anisync.android.type.MediaType
-import com.anisync.android.util.AniListTextEncoder.encodeForAniList
 import com.anisync.android.util.stripHtml
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.Optional
 import com.apollographql.cache.normalized.FetchPolicy
+import com.apollographql.cache.normalized.doNotStore
 import com.apollographql.cache.normalized.fetchPolicy
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -67,6 +73,9 @@ import javax.inject.Inject
 
 private const val HOUR_MS = 60L * 60L * 1000L
 private const val DAY_MS = 24L * HOUR_MS
+
+/** How long a checked copy of the viewer's own entry is trusted before a title page asks again. */
+private const val LIST_ENTRY_RECHECK_MS = 60L * 1000L
 
 private val MONTH_ABBR = arrayOf(
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -98,6 +107,7 @@ class DetailsRepositoryImpl @Inject constructor(
     private val mediaDetailsDao: MediaDetailsDao,
     private val libraryDao: LibraryDao,
     private val favouriteOverrideStore: FavouriteOverrideStore,
+    private val refreshTimes: LibraryRefreshTimes,
     private val accountStore: com.anisync.android.data.account.AccountStore
 ) : DetailsRepository {
 
@@ -109,7 +119,10 @@ class DetailsRepositoryImpl @Inject constructor(
     }
 
     override suspend fun refreshMediaDetails(id: Int): Result<Unit> {
+        val owner = accountStore.activeAccount.value?.id
         return safeApiCall {
+            val rowWhenAsked = owner?.let { libraryDao.getEntry(it, id) }
+            val askedAt = System.currentTimeMillis()
             val response = apolloClient.query(
                 GetMediaDetailsQuery(id = Optional.present(id))
             )
@@ -118,7 +131,7 @@ class DetailsRepositoryImpl @Inject constructor(
 
             val media = response.data?.Media ?: throw Exception("Media not found")
 
-            val listEntry = media.mediaListEntry
+            val listEntry = media.mediaListEntry?.viewerListEntryFields
             val listStatus = listEntry?.status?.toDomainStatus()
 
             val characters = media.characters?.edges?.filterNotNull()?.map { edge ->
@@ -341,8 +354,75 @@ class DetailsRepositoryImpl @Inject constructor(
             )
 
             mediaDetailsDao.insert(details.toEntity())
+            if (owner != null) {
+                syncLibraryEntry(owner, media.toLibraryEntry(), rowWhenAsked, listEntry, askedAt)
+            }
         }
     }
+
+    /**
+     * Brings the library row for [base]'s title in line with what AniList answered at [askedAt].
+     *
+     * The page shows the entry this fetch brought back while the edit sheet opens on the library row,
+     * which otherwise only moves when the whole list is refetched. Saving a sheet that opened on an
+     * older row sends that older progress back to AniList.
+     */
+    private suspend fun syncLibraryEntry(
+        owner: Int,
+        base: LibraryEntry,
+        rowWhenAsked: LibraryEntryEntity?,
+        server: ViewerListEntryFields?,
+        askedAt: Long,
+    ) {
+        refreshTimes.markEntryChecked(owner, base.mediaId, askedAt)
+        val row = libraryDao.getEntry(owner, base.mediaId)
+        when (val plan = planListEntrySync(rowWhenAsked, row, server, askedAt)) {
+            ListEntrySync.Keep -> Unit
+            ListEntrySync.Drop -> {
+                libraryDao.deleteByMediaId(owner, base.mediaId)
+                mediaDetailsDao.updateListEntry(base.mediaId, null, null, null, null, null, null)
+            }
+            is ListEntrySync.Take -> {
+                val entry = base.withListEntry(plan.entry)
+                libraryDao.replaceEntry(entry.toEntity(base.type ?: MediaType.ANIME).copy(ownerId = owner))
+                // The page reads this copy once the library has no row, so it has to agree.
+                mediaDetailsDao.updateListEntry(
+                    id = entry.mediaId,
+                    entryId = entry.id,
+                    status = entry.status,
+                    progress = entry.progress,
+                    notes = entry.notes,
+                    isPrivate = entry.isPrivate,
+                    hiddenFromStatusLists = entry.hiddenFromStatusLists
+                )
+            }
+        }
+    }
+
+    /** The title's half of a library row, filled the way the list sync fills it. */
+    private fun GetMediaDetailsQuery.Media.toLibraryEntry(): LibraryEntry = LibraryEntry(
+        id = 0,
+        mediaId = id,
+        titleRomaji = title?.romaji,
+        titleEnglish = title?.english,
+        titleNative = title?.native,
+        titleUserPreferred = title?.userPreferred ?: "Unknown Title",
+        coverUrl = coverImage?.extraLarge,
+        cover = CoverImage.of(coverImage?.medium, coverImage?.large, coverImage?.extraLarge),
+        progress = 0,
+        totalEpisodes = episodes,
+        totalChapters = chapters,
+        totalVolumes = volumes,
+        type = type,
+        format = format,
+        status = LibraryStatus.UNKNOWN,
+        nextAiringEpisode = nextAiringEpisode?.episode,
+        timeUntilAiring = nextAiringEpisode?.timeUntilAiring,
+        mediaStatus = status?.name,
+        nextAiringEpisodeTime = nextAiringEpisode?.airingAt?.toLong(),
+        mediaStartDate = startDate?.let { mapFuzzyDateToLong(it.year, it.month, it.day) },
+        genres = genres?.filterNotNull() ?: emptyList()
+    )
 
     override suspend fun refreshMediaDetailsIfStale(id: Int): Result<Unit> {
         val cached = mediaDetailsDao.getById(id)
@@ -360,6 +440,29 @@ class DetailsRepositoryImpl @Inject constructor(
         val stale = countdownElapsed || age >= staleAfterMillis(cached.status)
 
         return if (stale) refreshMediaDetails(id) else Result.Success(Unit)
+    }
+
+    override suspend fun refreshListEntryIfStale(mediaId: Int): Result<Unit> {
+        val owner = accountStore.activeAccount.value?.id ?: return Result.Success(Unit)
+        val local = libraryDao.getEntry(owner, mediaId) ?: return Result.Success(Unit)
+        // A details fetch carries the entry too, so it counts as a check.
+        val checkedAt = maxOf(
+            local.lastUpdated,
+            refreshTimes.entryCheckedAt(owner, mediaId) ?: 0L,
+            mediaDetailsDao.getById(mediaId)?.lastUpdated ?: 0L
+        )
+        if (System.currentTimeMillis() - checkedAt < LIST_ENTRY_RECHECK_MS) return Result.Success(Unit)
+
+        return safeApiCall {
+            val askedAt = System.currentTimeMillis()
+            val media = apolloClient.query(GetViewerListEntryQuery(mediaId = mediaId))
+                .fetchPolicy(FetchPolicy.NetworkOnly)
+                .doNotStore(true)
+                .execute()
+                .dataOrThrow()
+                .Media ?: return@safeApiCall
+            syncLibraryEntry(owner, local.toDomain(), local, media.mediaListEntry?.viewerListEntryFields, askedAt)
+        }
     }
 
     /**
@@ -885,8 +988,8 @@ class DetailsRepositoryImpl @Inject constructor(
                 com.anisync.android.SaveReviewMutation(
                     id = Optional.presentIfNotNull(reviewId),
                     mediaId = Optional.present(mediaId),
-                    body = Optional.present(encodeForAniList(body)),
-                    summary = Optional.present(encodeForAniList(summary)),
+                    body = Optional.present(body),
+                    summary = Optional.present(summary),
                     score = Optional.present(score),
                     private = Optional.present(private)
                 )

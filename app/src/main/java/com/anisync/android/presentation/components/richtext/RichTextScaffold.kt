@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.BottomAppBarDefaults
+import com.anisync.android.domain.ContentLimits
 import com.anisync.android.presentation.components.AppAlertDialog
 import com.anisync.android.presentation.components.AppCircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -105,6 +106,8 @@ fun RichTextScaffold(
     autoFocusBody: Boolean = true,
     minLength: Int = 1,
     maxLength: Int = 10_000,
+    measureForMin: (String) -> Int = { ContentLimits.characterCount(it.trim()) },
+    showMinProgress: Boolean = false,
     enableMediaAttach: Boolean = true,
     insertController: RichTextInsertController? = null,
     headerSlot: (@Composable ColumnScope.() -> Unit)? = null,
@@ -174,11 +177,12 @@ fun RichTextScaffold(
     }
 
     val isBlank by remember { derivedStateOf { bodyState.text.isBlank() } }
-    val meetsMinLength by remember(minLength) {
-        derivedStateOf { bodyState.text.trim().length >= minLength }
+    val minMeasure by remember(measureForMin) {
+        derivedStateOf { measureForMin(bodyState.text.toString()) }
     }
+    val meetsMinLength = minMeasure >= minLength
     val withinMaxLength by remember(maxLength) {
-        derivedStateOf { bodyState.text.length <= maxLength }
+        derivedStateOf { ContentLimits.characterCount(bodyState.text) <= maxLength }
     }
     val hasBodyChanges by remember {
         derivedStateOf { bodyState.text.toString() != initialBodySnapshot }
@@ -263,10 +267,12 @@ fun RichTextScaffold(
                 headerSlot?.invoke(this)
                 bodyEditor(Modifier.weight(1f).fillMaxWidth())
             }
+            val countingToMin = showMinProgress && !meetsMinLength
             RichTextCharCounter(
-                length = bodyState.text.length,
-                maxLength = maxLength,
-                modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp)
+                length = if (countingToMin) minMeasure else ContentLimits.characterCount(bodyState.text),
+                maxLength = if (countingToMin) minLength else maxLength,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
+                isMinimum = countingToMin
             )
         }
     }

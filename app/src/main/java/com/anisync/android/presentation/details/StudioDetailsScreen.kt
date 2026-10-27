@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
@@ -76,6 +75,9 @@ import com.anisync.android.presentation.components.bannerChromeContainer
 import com.anisync.android.presentation.components.bannerChromeTint
 import com.anisync.android.presentation.components.HeaderLevel
 import com.anisync.android.presentation.components.SectionHeader
+import com.anisync.android.presentation.components.navigation.BackTrailButton
+import com.anisync.android.presentation.navigation.TrailKind
+import com.anisync.android.presentation.navigation.TrailLabel
 import com.anisync.android.presentation.details.components.AppearanceRow
 import com.anisync.android.presentation.details.components.CharacterSkeletonContent
 import com.anisync.android.presentation.details.components.PersonDropdownChip
@@ -105,6 +107,7 @@ fun StudioDetailsScreen(
     studioId: Int,
     onBackClick: () -> Unit,
     onMediaClick: (Int) -> Unit = {},
+    onTrailLabel: (TrailLabel) -> Unit = {},
     viewModel: StudioDetailsViewModel = hiltViewModel(),
     sharedTransitionScope: SharedTransitionScope? = null,
     animatedVisibilityScope: AnimatedVisibilityScope? = null
@@ -118,6 +121,8 @@ fun StudioDetailsScreen(
         derivedStateOf { scrollBehavior.state.contentOffset < -50f }
     }
     val details = (uiState as? StudioDetailsUiState.Success)?.details
+    val trailLabel = details?.let { TrailLabel(it.name, TrailKind.STUDIO) }
+    LaunchedEffect(trailLabel) { trailLabel?.let(onTrailLabel) }
     // The wide layout carries the name on the banner as the header collapses, so the app bar
     // would only say it twice.
     val adaptive = LocalAdaptiveInfo.current
@@ -179,13 +184,7 @@ fun StudioDetailsScreen(
                 },
                 navigationIcon = {
                     if (!LocalPaneIsRoot.current) {
-                        IconButton(onClick = onBackClick, colors = chromeColors) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = stringResource(R.string.back),
-                                tint = iconTint
-                            )
-                        }
+                        BackTrailButton(onClick = onBackClick, colors = chromeColors)
                     }
                 },
                 actions = {

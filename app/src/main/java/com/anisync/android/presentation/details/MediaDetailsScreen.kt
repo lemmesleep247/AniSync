@@ -95,6 +95,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.ScaleFactor
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -103,6 +104,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -137,6 +139,7 @@ import com.anisync.android.presentation.components.MediaArtworkThemeOverride
 import com.anisync.android.presentation.components.ReviewCard
 import com.anisync.android.presentation.components.SectionHeader
 import com.anisync.android.presentation.components.UserAvatar
+import com.anisync.android.presentation.components.navigation.BackTrailButton
 import com.anisync.android.presentation.details.components.CharacterItem
 import com.anisync.android.presentation.details.components.ContentMetadataSection
 import com.anisync.android.presentation.details.components.DetailsSkeletonContent
@@ -156,9 +159,14 @@ import com.anisync.android.presentation.details.components.WatchOnRow
 import com.anisync.android.presentation.details.components.RecommendationItem
 import com.anisync.android.presentation.details.components.RelationItem
 import com.anisync.android.presentation.details.components.ReviewsListSheet
+import com.anisync.android.presentation.details.components.ScoreInfoSheet
+import com.anisync.android.presentation.details.components.WEIGHTED_SCORE_THREAD_ID
+import com.anisync.android.presentation.details.components.WEIGHTED_SCORE_THREAD_TITLE
 import com.anisync.android.presentation.details.components.StaffItem
 import com.anisync.android.presentation.details.components.mediaStatsTabContent
 import com.anisync.android.presentation.library.components.ScoreOnCompleteSheet
+import com.anisync.android.presentation.navigation.TrailKind
+import com.anisync.android.presentation.navigation.TrailLabel
 import com.anisync.android.presentation.util.AppMotion
 import com.anisync.android.presentation.util.LocalPaneIsRoot
 import com.anisync.android.presentation.util.TransitionKeys
@@ -204,6 +212,7 @@ fun MediaDetailsScreen(
     onViewAllDiscussions: (mediaId: Int, mediaTitle: String, coverColor: String?) -> Unit,
     onStartDiscussion: (mediaId: Int, title: String, coverUrl: String?, coverColor: String?) -> Unit,
     onUserClick: (String) -> Unit = {},
+    onTrailLabel: (TrailLabel) -> Unit = {},
     navigationIcon: ImageVector = Icons.AutoMirrored.Filled.ArrowBack,
     viewModel: MediaDetailsViewModel = hiltViewModel(),
     themesViewModel: MediaThemesViewModel = hiltViewModel(),
@@ -233,6 +242,16 @@ fun MediaDetailsScreen(
     // AnimeThemes only carries anime, so the lookup waits until the page says which it is.
     val isAnime = (uiState as? DetailsUiState.Success)?.details?.type == com.anisync.android.type.MediaType.ANIME
     LaunchedEffect(isAnime) { themesViewModel.start(isAnime) }
+
+    val trailLabel = (uiState as? DetailsUiState.Success)?.details?.let { details ->
+        TrailLabel(
+            title = details.getTitle(titleLanguage),
+            kind = if (details.type == com.anisync.android.type.MediaType.MANGA) TrailKind.MANGA else TrailKind.ANIME,
+            format = details.format,
+            year = details.year ?: details.seasonYear,
+        )
+    }
+    LaunchedEffect(trailLabel) { trailLabel?.let(onTrailLabel) }
 
     val spatialSpec = AppMotion.rememberSpatialSpec()
     val containerKey = TransitionKeys.container(sourceScreen, mediaId)
@@ -360,7 +379,18 @@ fun MediaDetailsScreen(
         coverColor = (uiState as? DetailsUiState.Success)?.details?.coverColor
     ) {
         with(sharedTransitionScope) {
-            Box(modifier = Modifier.fillMaxSize()) {
+            // The Library card morphs into the whole page, app bar and status bar scrim included. During
+            // the morph the container draws in the shared transition overlay, above anything left outside.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .sharedBounds(
+                        sharedContentState = rememberSharedContentState(key = containerKey),
+                        animatedVisibilityScope = animatedVisibilityScope,
+                        boundsTransform = { _, _ -> spatialSpec },
+                        clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(0.dp))
+                    )
+            ) {
                 Scaffold(
                     containerColor = MaterialTheme.colorScheme.background,
                     contentWindowInsets = ScaffoldDefaults.contentWindowInsets,
@@ -407,13 +437,11 @@ fun MediaDetailsScreen(
                                 },
                                 navigationIcon = {
                                     if (!LocalPaneIsRoot.current) {
-                                        IconButton(onClick = onBackClick, colors = chromeColors) {
-                                            Icon(
-                                                imageVector = navigationIcon,
-                                                contentDescription = stringResource(R.string.back),
-                                                tint = chromeTint
-                                            )
-                                        }
+                                        BackTrailButton(
+                                            onClick = onBackClick,
+                                            icon = navigationIcon,
+                                            colors = chromeColors
+                                        )
                                     }
                                 },
                                 actions = {
@@ -483,18 +511,9 @@ fun MediaDetailsScreen(
                             .fillMaxSize()
                             .padding(bottom = paddingValues.calculateBottomPadding())
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                // Note: We intentionally IGNORE top padding here to let the content
-                                // (specifically the header image) draw behind the transparent status bar.
-                                .sharedBounds(
-                                    sharedContentState = rememberSharedContentState(key = containerKey),
-                                    animatedVisibilityScope = animatedVisibilityScope,
-                                    boundsTransform = { _, _ -> spatialSpec },
-                                    clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(0.dp))
-                                )
-                        ) {
+                        // Note: We intentionally IGNORE top padding here to let the content
+                        // (specifically the header image) draw behind the transparent status bar.
+                        Box(modifier = Modifier.fillMaxSize()) {
                             when (val state = uiState) {
                                 is DetailsUiState.Loading -> DetailsSkeletonContent(onBackClick = onBackClick)
                             is DetailsUiState.Success -> {
@@ -606,6 +625,17 @@ fun MediaDetailsScreen(
                                             state.details.getTitle(titleLanguage),
                                             state.details.coverUrl,
                                             state.details.coverColor
+                                        )
+                                    },
+                                    onScoreExplanationClick = {
+                                        shouldKeepChromeOverlayForReturn = true
+                                        hasObservedDetailsReEnter = false
+                                        // A site announcement, not this title's thread, so it keeps
+                                        // the app's own colours.
+                                        onDiscussionClick(
+                                            WEIGHTED_SCORE_THREAD_ID,
+                                            WEIGHTED_SCORE_THREAD_TITLE,
+                                            null
                                         )
                                     },
                                     onRecommendMedia = viewModel::recommendMedia,
@@ -927,6 +957,7 @@ fun DetailsPageContent(
     onDiscussionClick: (Int, String) -> Unit,
     onViewAllDiscussions: () -> Unit,
     onStartDiscussion: () -> Unit,
+    onScoreExplanationClick: () -> Unit,
     onRecommendMedia: (Int) -> Unit,
     onUserClick: (String) -> Unit,
     onStatusSelect: (LibraryStatus) -> Unit,
@@ -968,6 +999,7 @@ fun DetailsPageContent(
 
     // ImageViewerDialog state for cover/banner image; it opens on whichever was tapped.
     var showImageViewer by rememberSaveable { mutableStateOf(false) }
+    var showScoreInfo by rememberSaveable { mutableStateOf(false) }
     var viewerIndex by rememberSaveable { mutableIntStateOf(0) }
     val viewerImages = remember(details.cover.url() ?: details.coverUrl, details.bannerUrl) {
         listOfNotNull(details.coverUrl, details.bannerUrl)
@@ -1068,8 +1100,12 @@ fun DetailsPageContent(
     val dockPx = with(density) { topBarHeight.roundToPx() }.toFloat()
     var contentTopWindow by remember { mutableFloatStateOf(0f) }
     var inlineTabsTopWindow by remember { mutableFloatStateOf(Float.MAX_VALUE) }
+    // Coming back to the page below the tabs never lays the in-list strip out, so its top is never
+    // measured and the pinned copy goes by the list's position instead. The tabs are item 2.
     val tabsDocked by remember {
-        derivedStateOf { inlineTabsTopWindow <= contentTopWindow + dockPx }
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 2 || inlineTabsTopWindow <= contentTopWindow + dockPx
+        }
     }
 
     Box(
@@ -1098,7 +1134,8 @@ fun DetailsPageContent(
                     onBannerClick = {
                         viewerIndex = viewerImages.indexOf(details.bannerUrl).coerceAtLeast(0)
                         showImageViewer = true
-                    }
+                    },
+                    onScoreClick = { showScoreInfo = true }
                 )
             }
 
@@ -1656,6 +1693,20 @@ fun DetailsPageContent(
         )
     }
 
+    val weightedScore = details.score
+    if (showScoreInfo && weightedScore != null) {
+        ScoreInfoSheet(
+            title = details.getTitle(titleLanguage),
+            weightedScore = weightedScore.asTenPointScore(),
+            meanScore = details.meanScore?.asTenPointScore(),
+            onReadMore = {
+                showScoreInfo = false
+                onScoreExplanationClick()
+            },
+            onDismiss = { showScoreInfo = false }
+        )
+    }
+
     if (showRecommendSheet) {
         details.type?.let { mediaType ->
             RecommendMediaSheet(
@@ -1694,6 +1745,7 @@ fun PageHeaderSection(
     titleLanguage: TitleLanguage,
     onCoverClick: () -> Unit = {},
     onBannerClick: () -> Unit = {},
+    onScoreClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -1716,8 +1768,7 @@ fun PageHeaderSection(
 
     // --- Data Preparation ---
     val displayTitle = remember(details, titleLanguage) { details.getTitle(titleLanguage) }
-    val formattedScore =
-        remember(details.score) { details.score?.let { String.format("%.1f", it / 10f) } }
+    val formattedScore = remember(details.score) { details.score?.asTenPointScore() }
 
     val bannerModel = remember(details) { details.headerBanner }
 
@@ -1793,10 +1844,14 @@ fun PageHeaderSection(
             spatialSpec = spatialSpec,
             sharedTransitionScope = sharedTransitionScope,
             animatedVisibilityScope = animatedVisibilityScope,
-            onCoverClick = onCoverClick
+            onCoverClick = onCoverClick,
+            onScoreClick = onScoreClick
         )
     }
 }
+
+/** AniList's 100-point score the way the page writes it, 82 as 8.2. */
+private fun Int.asTenPointScore(): String = String.format("%.1f", this / 10f)
 
 @Composable
 private fun BannerImage(
@@ -1936,7 +1991,8 @@ private fun ContentRow(
     spatialSpec: FiniteAnimationSpec<Rect>,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
-    onCoverClick: () -> Unit = {}
+    onCoverClick: () -> Unit = {},
+    onScoreClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coverData = details.cover.url() ?: details.coverUrl
@@ -2046,7 +2102,7 @@ private fun ContentRow(
                 // Row 2: the score, said in words. Popularity and favourites move to the Stats
                 // tab and the Information grid, where they can carry a label instead of an icon
                 // the viewer has to decode.
-                ScoreLine(details = details, formattedScore = formattedScore)
+                ScoreLine(details = details, formattedScore = formattedScore, onClick = onScoreClick)
             }
         }
     }
@@ -2081,7 +2137,7 @@ private fun MetadataTags(details: MediaDetails) {
  * heart, which asked the viewer to work out which was which.
  */
 @Composable
-private fun ScoreLine(details: MediaDetails, formattedScore: String) {
+private fun ScoreLine(details: MediaDetails, formattedScore: String, onClick: () -> Unit) {
     val topRank = remember(details.rankings) {
         details.rankings.firstOrNull {
             it.allTime && it.type == com.anisync.android.domain.MediaRankingType.RATED
@@ -2089,6 +2145,11 @@ private fun ScoreLine(details: MediaDetails, formattedScore: String) {
     }
 
     Row(
+        modifier = Modifier.clickable(
+            onClickLabel = stringResource(R.string.a11y_score_info),
+            role = Role.Button,
+            onClick = onClick
+        ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
@@ -2104,17 +2165,39 @@ private fun ScoreLine(details: MediaDetails, formattedScore: String) {
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
         )
-        Text(
-            text = if (topRank != null) {
-                stringResource(R.string.details_score_average_ranked, topRank.rank)
-            } else {
-                stringResource(R.string.details_score_average)
-            },
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+        ScoreLabel(
+            ranked = topRank?.let { stringResource(R.string.details_score_average_ranked, it.rank) },
+            plain = stringResource(R.string.details_score_average),
+            modifier = Modifier.weight(1f, fill = false)
         )
+        Icon(
+            imageVector = Icons.Outlined.Info,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(14.dp)
+        )
+    }
+}
+
+/**
+ * The words after the score. The rank goes when the line runs out of room, on a narrow phone or at a
+ * large font size, so the line never ends in an ellipsis before the info mark.
+ */
+@Composable
+private fun ScoreLabel(ranked: String?, plain: String, modifier: Modifier = Modifier) {
+    val style = MaterialTheme.typography.labelMedium
+    val color = MaterialTheme.colorScheme.onSurfaceVariant
+    Layout(
+        modifier = modifier,
+        content = {
+            Text(text = ranked ?: plain, style = style, color = color, maxLines = 1, softWrap = false)
+            Text(text = plain, style = style, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    ) { measurables, constraints ->
+        val (full, short) = measurables
+        val fits = full.maxIntrinsicWidth(constraints.maxHeight) <= constraints.maxWidth
+        val placeable = (if (fits) full else short).measure(constraints.copy(minWidth = 0))
+        layout(placeable.width, placeable.height) { placeable.place(0, 0) }
     }
 }
 

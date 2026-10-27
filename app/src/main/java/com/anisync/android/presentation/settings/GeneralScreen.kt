@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Search
@@ -29,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,6 +48,7 @@ import com.anisync.android.R
 import com.anisync.android.data.AppLocale
 import com.anisync.android.data.WhatsNewItem
 import com.anisync.android.presentation.components.LocalWhatsNew
+import com.anisync.android.presentation.components.WhatsNewPill
 import com.anisync.android.presentation.components.rememberActiveWhatsNew
 import com.anisync.android.presentation.settings.components.InfoNotice
 import com.anisync.android.data.StartScreen
@@ -69,6 +72,7 @@ fun GeneralScreen(
     // Read straight off AppSettings: the ViewModel's uiState is assembled from combines that
     // are already at their arity ceiling, and this is a single value with a single writer.
     val startScreen by LocalAppSettings.current.startScreen.collectAsStateWithLifecycle()
+    val backTrailEnabled by LocalAppSettings.current.backTrailEnabled.collectAsStateWithLifecycle()
 
     var showStartScreenSheet by rememberSaveable { mutableStateOf(false) }
     var showStreamingServiceSheet by rememberSaveable { mutableStateOf(false) }
@@ -100,7 +104,12 @@ fun GeneralScreen(
 
     val whatsNewStore = LocalWhatsNew.current
     val whatsNew = rememberActiveWhatsNew()
-    LaunchedEffect(Unit) { whatsNewStore.markSeen(WhatsNewItem.SETTINGS_GENERAL) }
+    // Read once on entry so the pill stays up for the visit that clears it.
+    val showBackTrailNew = remember { WhatsNewItem.GENERAL_BACK_TRAIL in whatsNewStore.active.value }
+    LaunchedEffect(Unit) {
+        whatsNewStore.markSeen(WhatsNewItem.SETTINGS_GENERAL)
+        whatsNewStore.markSeen(WhatsNewItem.GENERAL_BACK_TRAIL)
+    }
 
     SettingsScreenScaffold(
         title = stringResource(R.string.settings_general),
@@ -139,6 +148,18 @@ fun GeneralScreen(
                 subtitle = stringResource(R.string.settings_nav_double_tap_search_desc),
                 checked = uiState.navBarDoubleTapSearch,
                 onCheckedChange = { viewModel.onAction(SettingsAction.SetNavBarDoubleTapSearch(it)) }
+            )
+            SwitchSettingsItem(
+                icon = Icons.Default.History,
+                title = stringResource(R.string.settings_back_trail),
+                subtitle = stringResource(R.string.settings_back_trail_desc),
+                checked = backTrailEnabled,
+                onCheckedChange = { viewModel.onAction(SettingsAction.SetBackTrailEnabled(it)) },
+                titleBadge = if (showBackTrailNew) {
+                    { WhatsNewPill(WhatsNewItem.Kind.NEW) }
+                } else {
+                    null
+                }
             )
             SwitchSettingsItem(
                 icon = Icons.Default.Vibration,

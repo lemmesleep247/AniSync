@@ -26,7 +26,6 @@ import com.anisync.android.domain.Result
 import com.anisync.android.domain.Tag
 import com.anisync.android.type.MediaListStatus
 import com.anisync.android.type.MediaType
-import com.anisync.android.util.AniListTextEncoder.encodeForAniList
 import com.anisync.android.widget.core.WidgetRefresh
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.Optional
@@ -63,6 +62,7 @@ class LibraryRepositoryImpl @Inject constructor(
     private val mediaTagsDao: MediaTagsDao,
     private val appSettings: AppSettings,
     private val accountStore: AccountStore,
+    private val refreshTimes: LibraryRefreshTimes,
     @param:ApplicationContext private val context: Context
 ) : LibraryRepository {
 
@@ -125,7 +125,10 @@ class LibraryRepositoryImpl @Inject constructor(
             val lists = response.data?.MediaListCollection?.lists ?: emptyList()
             val options = response.data?.MediaListCollection?.user?.mediaListOptions
 
-            val scoreFormatApi = resolvedScoreFormat
+            // The scores in this response are in the scoring system it names, and a cached viewer can
+            // still hold the one AniList converted them away from.
+            val scoreFormatApi = options?.scoreFormat
+                ?: resolvedScoreFormat
                 ?: apolloClient.query(GetViewerQuery())
                     .fetchPolicy(FetchPolicy.CacheFirst)
                     .execute()
@@ -257,8 +260,12 @@ class LibraryRepositoryImpl @Inject constructor(
             }
 
             libraryDao.smartMergeByType(owner, type, entries.map { it.toEntity(type).copy(ownerId = owner) })
+            refreshTimes.markRefreshed(owner, type)
         }
     }
+
+    override fun lastRefreshedAt(type: MediaType): Long? =
+        refreshTimes.lastRefreshedAt(currentOwnerId(), type)
 
     override fun observeLibraryTags(): Flow<Map<Int, List<Tag>>> =
         mediaTagsDao.observeAll().map { rows -> rows.associate { it.mediaId to it.tags } }
@@ -435,7 +442,7 @@ class LibraryRepositoryImpl @Inject constructor(
                     } else {
                         Optional.absent()
                     },
-                    notes = Optional.presentIfNotNull(updatedEntry.notes?.let(::encodeForAniList)),
+                    notes = Optional.presentIfNotNull(updatedEntry.notes),
                     startedAt = updatedEntry.startedAt?.let { Optional.present(it.toFuzzyDateInput()) } ?: Optional.absent(),
                     completedAt = updatedEntry.completedAt?.let { Optional.present(it.toFuzzyDateInput()) } ?: Optional.absent(),
                     customLists = Optional.present(updatedEntry.customLists),

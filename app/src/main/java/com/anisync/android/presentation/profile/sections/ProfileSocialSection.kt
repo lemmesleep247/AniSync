@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -17,11 +18,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.Icon
+import com.anisync.android.data.WhatsNewItem
 import com.anisync.android.presentation.components.AppCircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
@@ -42,6 +48,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.anisync.android.presentation.components.LocalWhatsNew
+import com.anisync.android.presentation.components.WhatsNewPill
+import com.anisync.android.presentation.components.rememberActiveWhatsNew
+import com.anisync.android.presentation.util.bouncyCombinedClickable
 import com.anisync.android.ui.theme.emphasis
 import com.anisync.android.R
 import com.anisync.android.domain.SocialThreadComment
@@ -53,7 +63,6 @@ import com.anisync.android.presentation.forum.components.shared.StatBadge
 import com.anisync.android.presentation.profile.ProfileSocialTab
 import com.anisync.android.presentation.profile.ProfileUiState
 import com.anisync.android.presentation.profile.components.PlaceholderTabContent
-import com.anisync.android.presentation.util.bouncyClickable
 import org.jsoup.Jsoup
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -65,13 +74,20 @@ fun LazyListScope.profileSocialTab(
     onThreadClick: (threadId: Int, threadTitle: String) -> Unit = { _, _ -> },
     onCommentClick: (threadId: Int, commentId: Int, threadTitle: String) -> Unit = { _, _, _ -> },
     onLoadMore: () -> Unit = {},
-    userColumns: Int = 3
+    userColumns: Int = 3,
+    /** Set on the viewer's own profile, where each follower carries a remove button. */
+    onRemoveFollower: ((SocialUser) -> Unit)? = null
 ) {
     val selectedTab = uiState.selectedSocialTab
     val tabs = ProfileSocialTab.entries
     val selectedIndex = tabs.indexOf(selectedTab).coerceAtLeast(0)
 
     item(key = "social_tabs") {
+        val whatsNewStore = LocalWhatsNew.current
+        val mutualsNew = WhatsNewItem.PROFILE_MUTUALS in rememberActiveWhatsNew()
+        LaunchedEffect(selectedTab) {
+            if (selectedTab == ProfileSocialTab.MUTUALS) whatsNewStore.markSeen(WhatsNewItem.PROFILE_MUTUALS)
+        }
         LazyRow(
             modifier = modifier
                 .fillMaxWidth()
@@ -87,7 +103,12 @@ fun LazyListScope.profileSocialTab(
                     onClick = { onTabSelected(tab) },
                     icon = socialTabIcon(tab),
                     label = stringResource(tab.labelRes),
-                    count = socialTabCount(uiState, tab)
+                    count = socialTabCount(uiState, tab),
+                    badge = if (tab == ProfileSocialTab.MUTUALS && mutualsNew) {
+                        { WhatsNewPill(WhatsNewItem.Kind.NEW) }
+                    } else {
+                        null
+                    }
                 )
             }
         }
@@ -129,13 +150,15 @@ fun LazyListScope.profileSocialTab(
     val hasNextPage = when (selectedTab) {
         ProfileSocialTab.FOLLOWING -> uiState.followingHasNextPage
         ProfileSocialTab.FOLLOWERS -> uiState.followersHasNextPage
+        ProfileSocialTab.MUTUALS -> uiState.mutualsHasNextPage
         ProfileSocialTab.FORUM_THREADS -> uiState.threadsHasNextPage
         ProfileSocialTab.FORUM_COMMENTS -> uiState.commentsHasNextPage
     }
 
     when (selectedTab) {
         ProfileSocialTab.FOLLOWING -> renderSocialUsers(uiState.socialFollowing, selectedTab, modifier, onUserClick, hasNextPage, isPaginating, onLoadMore, userColumns)
-        ProfileSocialTab.FOLLOWERS -> renderSocialUsers(uiState.socialFollowers, selectedTab, modifier, onUserClick, hasNextPage, isPaginating, onLoadMore, userColumns)
+        ProfileSocialTab.FOLLOWERS -> renderSocialUsers(uiState.socialFollowers, selectedTab, modifier, onUserClick, hasNextPage, isPaginating, onLoadMore, userColumns, onRemoveFollower)
+        ProfileSocialTab.MUTUALS -> renderSocialUsers(uiState.socialMutuals, selectedTab, modifier, onUserClick, hasNextPage, isPaginating, onLoadMore, userColumns)
         ProfileSocialTab.FORUM_THREADS -> {
             if (uiState.socialThreads.isEmpty()) {
                 item(key = "social_threads_empty") {
@@ -228,7 +251,8 @@ private fun LazyListScope.renderSocialUsers(
     hasNextPage: Boolean,
     isPaginating: Boolean,
     onLoadMore: () -> Unit,
-    userColumns: Int
+    userColumns: Int,
+    onRemoveUser: ((SocialUser) -> Unit)? = null
 ) {
     if (users.isEmpty()) {
         item(key = "social_users_empty") {
@@ -261,7 +285,8 @@ private fun LazyListScope.renderSocialUsers(
                         SocialUserItem(
                             user = user,
                             onClick = { onUserClick(user.name) },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            onRemove = onRemoveUser?.let { { it(user) } }
                         )
                     }
                 }
@@ -277,10 +302,11 @@ private fun LazyListScope.renderSocialUsers(
     }
 }
 
-/** Only the two user lists carry a total; the forum tabs page without one. */
+/** Only the user lists carry a total; the forum tabs page without one. */
 private fun socialTabCount(uiState: ProfileUiState, tab: ProfileSocialTab): Int? = when (tab) {
     ProfileSocialTab.FOLLOWING -> uiState.followingTotal
     ProfileSocialTab.FOLLOWERS -> uiState.followersTotal
+    ProfileSocialTab.MUTUALS -> uiState.mutualsTotal
     ProfileSocialTab.FORUM_THREADS, ProfileSocialTab.FORUM_COMMENTS -> null
 }
 
@@ -288,6 +314,7 @@ private fun socialTabIcon(tab: ProfileSocialTab): ImageVector {
     return when (tab) {
         ProfileSocialTab.FOLLOWING -> Icons.Default.Person
         ProfileSocialTab.FOLLOWERS -> Icons.Default.Groups
+        ProfileSocialTab.MUTUALS -> Icons.Default.Handshake
         ProfileSocialTab.FORUM_THREADS -> Icons.Default.RateReview
         ProfileSocialTab.FORUM_COMMENTS -> Icons.Default.ChatBubbleOutline
     }
@@ -297,7 +324,8 @@ private fun socialTabIcon(tab: ProfileSocialTab): ImageVector {
 private fun SocialUserItem(
     user: SocialUser,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onRemove: (() -> Unit)? = null
 ) {
     val imageShape = RoundedCornerShape(dimensionResource(R.dimen.corner_radius_large))
 
@@ -305,23 +333,42 @@ private fun SocialUserItem(
         horizontalAlignment = Alignment.Start,
         modifier = modifier
             .clip(imageShape)
-            .bouncyClickable(
+            .bouncyCombinedClickable(
                 onClick = onClick,
+                onLongClick = onRemove,
                 role = Role.Button,
-                onClickLabel = user.name
+                onClickLabel = user.name,
+                onLongClickLabel = stringResource(R.string.a11y_remove_follower)
             )
             .padding(bottom = dimensionResource(R.dimen.spacing_small))
     ) {
-        AsyncImage(
-            model = user.avatarUrl,
-            contentDescription = user.name,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .height(dimensionResource(R.dimen.character_image_height))
-                .fillMaxWidth()
-                .clip(imageShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-        )
+        Box {
+            AsyncImage(
+                model = user.avatarUrl,
+                contentDescription = user.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .height(dimensionResource(R.dimen.character_image_height))
+                    .fillMaxWidth()
+                    .clip(imageShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            )
+            if (onRemove != null) {
+                FilledTonalIconButton(
+                    onClick = onRemove,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PersonRemove,
+                        contentDescription = stringResource(R.string.a11y_remove_follower_named, user.name),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
         Spacer(Modifier.height(dimensionResource(R.dimen.spacing_small)))
         Text(
             text = user.name,

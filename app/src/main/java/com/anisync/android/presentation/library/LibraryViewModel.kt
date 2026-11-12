@@ -690,7 +690,7 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true) }
             val type = _uiState.value.mediaType
-            when (val result = libraryRepository.refreshLibrary("", type)) {
+            when (val result = libraryRepository.refreshLibrary(type)) {
                 is Result.Success -> syncTags(type)
                 is Result.Error -> showResultError(result)
             }
@@ -722,8 +722,21 @@ class LibraryViewModel @Inject constructor(
     // The status before the first tap of a burst, so the settled save can tell whether the burst is
     // what finished the entry.
     private val statusBaseline = java.util.concurrent.ConcurrentHashMap<Int, LibraryStatus>()
-    private val progressCoalescer =
-        com.anisync.android.presentation.util.MutationCoalescer<Int, Int>(viewModelScope, debounceMs = 600L) { mediaId, progress ->
+    private val progressCoalescer: com.anisync.android.presentation.util.MutationCoalescer<Int, Int> =
+        com.anisync.android.presentation.util.MutationCoalescer(viewModelScope, debounceMs = 600L) { mediaId, progress ->
+            val startedFrom = progressBaseline[mediaId]
+            val elsewhere = startedFrom?.let {
+                progressChangedElsewhere(detailsRepository, libraryRepository, mediaId, it)
+            }
+            if (elsewhere != null) {
+                // The taps counted from an older row. Show AniList's count instead of writing over it.
+                progressBaseline[mediaId] = elsewhere
+                statusBaseline.remove(mediaId)
+                progressCoalescer.reset(mediaId, elsewhere)
+                patchEntryProgress(mediaId, elsewhere)
+                toastManager.showToast(ToastType.INFO, R.string.library_progress_changed_elsewhere, elsewhere)
+                return@MutationCoalescer false
+            }
             when (val result = libraryRepository.updateProgress(mediaId, progress)) {
                 is Result.Success -> {
                     progressBaseline[mediaId] = progress
@@ -784,15 +797,15 @@ class LibraryViewModel @Inject constructor(
 
     /**
      * Opens the edit sheet on [entry] as AniList has it now. The row can be up to a list refresh old,
-     * and a sheet opened on it would send its older progress back with any edit. The check is skipped
-     * for an entry checked in the last minute, and a slow or refused one leaves the row as it is.
+     * and a sheet opened on it would show its older progress. It asks AniList every time, even right
+     * after a sync, and a slow or refused check leaves the row as it is.
      */
     private fun openEditor(entry: LibraryEntry) {
         editorJob?.cancel()
         editorJob = viewModelScope.launch {
             withTimeoutOrNull(EDITOR_CHECK_TIMEOUT_MS) {
                 withRequestPriority(RequestPriority.Prefetch) {
-                    detailsRepository.refreshListEntryIfStale(entry.mediaId)
+                    detailsRepository.checkListEntry(entry.mediaId)
                 }
             }
             // Gone means it was taken off the list elsewhere, and the card goes with it.
@@ -807,8 +820,9 @@ class LibraryViewModel @Inject constructor(
     }
 
     private fun updateEntry(entry: LibraryEntry) {
+        val baseline = _uiState.value.editingEntry?.takeIf { it.mediaId == entry.mediaId }
         viewModelScope.launch {
-            when (val result = libraryRepository.updateEntry(entry)) {
+            when (val result = libraryRepository.updateEntry(entry, baseline)) {
                 is Result.Success -> toastManager.showToast(ToastType.SUCCESS, message = "Entry updated")
                 is Result.Error -> showResultError(result)
             }

@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.anisync.android.R
+import com.anisync.android.presentation.components.NameWithDonatorBadge
 import com.anisync.android.presentation.components.UserAvatar
 import com.anisync.android.presentation.components.formatRelativeTimeSeconds
 import com.anisync.android.ui.theme.LocalAvatarShape
@@ -70,6 +71,8 @@ fun AuthorRow(
     timestampSeconds: Long,
     modifier: Modifier = Modifier,
     avatarSize: Dp = 24.dp,
+    donatorTier: Int = 0,
+    donatorBadge: String? = null,
     onUserClick: ((String) -> Unit)? = null
 ) {
     Row(
@@ -84,15 +87,21 @@ fun AuthorRow(
             size = avatarSize
         )
         Spacer(Modifier.width(8.dp))
-        Text(
-            text = name,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        NameWithDonatorBadge(
+            tier = donatorTier,
+            badgeText = donatorBadge,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
             modifier = Modifier.weight(1f, fill = false)
-        )
+        ) {
+            Text(
+                text = name,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+        }
         Spacer(Modifier.width(8.dp))
         Text(
             text = stringResource(R.string.separator_bullet),

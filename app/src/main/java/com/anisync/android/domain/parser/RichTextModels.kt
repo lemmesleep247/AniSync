@@ -49,6 +49,9 @@ sealed interface RichTextInline {
 
     /** A small image that flows within text (e.g. an emoji-sized `img20(...)` inside a heading). */
     data class Image(val url: String, val width: Int?, val height: Int?) : RichTextInline
+
+    /** A `~!…!~` that shares its line with other text, drawn as its label until tapped. */
+    data class Spoiler(val label: String?, val children: List<RichTextInline>) : RichTextInline
 }
 
 sealed interface RichTextBlock {
@@ -101,7 +104,9 @@ sealed interface RichTextBlock {
 
     data class Spoiler(
         val children: List<RichTextBlock>,
-        override val align: RichTextAlignment = RichTextAlignment.Start
+        override val align: RichTextAlignment = RichTextAlignment.Start,
+        /** What the writer said it spoils, from `~!{label} …!~`. Null shows the generic word. */
+        val label: String? = null
     ) : RichTextBlock
 
     data class Blockquote(

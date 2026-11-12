@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import com.anisync.android.domain.ForumThread
 import com.anisync.android.domain.parser.ParsedRichText
 import com.anisync.android.presentation.components.AnimatedFavoriteButton
+import com.anisync.android.presentation.components.NameWithDonatorBadge
 import com.anisync.android.presentation.components.RichTextRenderer
 import com.anisync.android.presentation.components.UserAvatar
 import com.anisync.android.presentation.forum.components.shared.formatCount
@@ -86,6 +87,8 @@ fun ThreadHeaderTop(
             ThreadAuthorBlock(
                 name = thread.authorName,
                 avatarUrl = thread.authorAvatarUrl,
+                donatorTier = thread.authorDonatorTier,
+                donatorBadge = thread.authorDonatorBadge,
                 createdAt = thread.createdAt,
                 onUserClick = onUserClick
             )
@@ -163,6 +166,8 @@ fun ThreadHeaderTop(
 private fun ThreadAuthorBlock(
     name: String,
     avatarUrl: String?,
+    donatorTier: Int,
+    donatorBadge: String?,
     createdAt: Long,
     onUserClick: (String) -> Unit
 ) {
@@ -179,14 +184,20 @@ private fun ThreadAuthorBlock(
         )
         Spacer(Modifier.width(10.dp))
         Column {
-            Text(
-                text = name,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            NameWithDonatorBadge(
+                tier = donatorTier,
+                badgeText = donatorBadge,
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            ) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
             Text(
                 text = createdAt.toRelativeTime(LocalResources.current),
                 style = MaterialTheme.typography.labelSmall,

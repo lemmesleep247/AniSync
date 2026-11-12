@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -40,8 +41,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -68,7 +67,9 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.anisync.android.R
 import com.anisync.android.presentation.components.CollapsingTopBarScaffold
-import com.anisync.android.presentation.components.CustomPullToRefreshIndicator
+import com.anisync.android.presentation.components.DonatorBadge
+import com.anisync.android.presentation.components.DonatorBadgePlacement
+import com.anisync.android.presentation.components.AppPullToRefreshBox
 import com.anisync.android.presentation.components.ErrorState
 import com.anisync.android.presentation.components.HeaderLevel
 import com.anisync.android.presentation.components.SectionHeader
@@ -103,7 +104,6 @@ fun ActivityDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
-    val pullToRefreshState = rememberPullToRefreshState()
     val context = LocalContext.current
 
     var collapsedIds by rememberSaveable(
@@ -331,20 +331,11 @@ fun ActivityDetailScreen(
             }
         }
     ) { topContentPadding ->
-        PullToRefreshBox(
+        AppPullToRefreshBox(
             isRefreshing = uiState.isRefreshing,
-            state = pullToRefreshState,
             onRefresh = rememberRateLimitedRefresh { viewModel.onAction(ActivityDetailAction.Refresh) },
-            indicator = {
-                CustomPullToRefreshIndicator(
-                    isRefreshing = uiState.isRefreshing,
-                    state = pullToRefreshState,
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = topContentPadding)
-                )
-            },
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            topInset = topContentPadding
         ) {
             when {
                 uiState.isLoading && uiState.activity == null -> {
@@ -379,6 +370,8 @@ fun ActivityDetailScreen(
                             ActivityHeaderBlock(
                                 authorName = activity.authorName,
                                 authorAvatarUrl = activity.authorAvatarUrl,
+                                authorDonatorTier = activity.authorDonatorTier,
+                                authorDonatorBadge = activity.authorDonatorBadge,
                                 createdAt = activity.createdAt,
                                 isMessage = activity.isMessage,
                                 isPrivate = activity.isPrivate,
@@ -602,6 +595,8 @@ fun ActivityDetailScreen(
 private fun ActivityHeaderBlock(
     authorName: String,
     authorAvatarUrl: String?,
+    authorDonatorTier: Int,
+    authorDonatorBadge: String?,
     createdAt: Long,
     isMessage: Boolean,
     isPrivate: Boolean,
@@ -622,6 +617,8 @@ private fun ActivityHeaderBlock(
                 MessageActivityHeader(
                     authorName = authorName,
                     authorAvatarUrl = authorAvatarUrl,
+                    authorDonatorTier = authorDonatorTier,
+                    authorDonatorBadge = authorDonatorBadge,
                     recipientName = recipientName,
                     recipientAvatarUrl = recipientAvatarUrl,
                     createdAt = createdAt,
@@ -634,6 +631,8 @@ private fun ActivityHeaderBlock(
                     avatarUrl = authorAvatarUrl,
                     timestampSeconds = createdAt,
                     avatarSize = 44.dp,
+                    donatorTier = authorDonatorTier,
+                    donatorBadge = authorDonatorBadge,
                     onUserClick = onUserClick
                 )
             }
@@ -646,6 +645,8 @@ private fun ActivityHeaderBlock(
 private fun MessageActivityHeader(
     authorName: String,
     authorAvatarUrl: String?,
+    authorDonatorTier: Int,
+    authorDonatorBadge: String?,
     recipientName: String,
     recipientAvatarUrl: String?,
     createdAt: Long,
@@ -675,11 +676,11 @@ private fun MessageActivityHeader(
             }
         }
         Spacer(Modifier.height(12.dp))
-        Text(
-            text = stringResource(R.string.activity_detail_wrote_to, authorName, recipientName),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
+        WroteToLine(
+            authorName = authorName,
+            recipientName = recipientName,
+            donatorTier = authorDonatorTier,
+            donatorBadge = authorDonatorBadge
         )
         Spacer(Modifier.height(4.dp))
         Text(
@@ -687,6 +688,52 @@ private fun MessageActivityHeader(
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.outline
         )
+    }
+}
+
+private const val AUTHOR_SLOT = "\uFFFC"
+
+/** "A wrote to B", with the sender's donator badge right after their name as on the website. */
+@Composable
+private fun WroteToLine(authorName: String, recipientName: String, donatorTier: Int, donatorBadge: String?) {
+    val style = MaterialTheme.typography.titleSmall
+    val color = MaterialTheme.colorScheme.onSurface
+    val template = stringResource(R.string.activity_detail_wrote_to, AUTHOR_SLOT, recipientName)
+    val slot = template.indexOf(AUTHOR_SLOT)
+    if (donatorTier <= 0 || slot < 0) {
+        Text(
+            text = template.replace(AUTHOR_SLOT, authorName),
+            style = style,
+            fontWeight = FontWeight.SemiBold,
+            color = color
+        )
+        return
+    }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = template.substring(0, slot) + authorName,
+            style = style,
+            fontWeight = FontWeight.SemiBold,
+            color = color,
+            modifier = Modifier.align(Alignment.CenterVertically)
+        )
+        DonatorBadge(
+            tier = donatorTier,
+            badgeText = donatorBadge,
+            placement = DonatorBadgePlacement.NextToName,
+            modifier = Modifier.align(Alignment.CenterVertically),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+        )
+        val rest = template.substring(slot + AUTHOR_SLOT.length).trim()
+        if (rest.isNotEmpty()) {
+            Text(
+                text = rest,
+                style = style,
+                fontWeight = FontWeight.SemiBold,
+                color = color,
+                modifier = Modifier.align(Alignment.CenterVertically)
+            )
+        }
     }
 }
 

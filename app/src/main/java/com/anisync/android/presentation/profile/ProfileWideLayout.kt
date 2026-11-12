@@ -29,8 +29,6 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -71,7 +69,7 @@ import androidx.compose.ui.unit.dp
 import com.anisync.android.R
 import com.anisync.android.domain.UserProfile
 import com.anisync.android.presentation.components.AsyncRichTextRenderer
-import com.anisync.android.presentation.components.CustomPullToRefreshIndicator
+import com.anisync.android.presentation.components.AppPullToRefreshBox
 import com.anisync.android.presentation.components.UserAvatar
 import com.anisync.android.presentation.components.shareFabClearance
 import com.anisync.android.presentation.components.alert.rememberRateLimitedRefresh
@@ -818,6 +816,7 @@ private fun ProfileTabPane(
             availableWidth = maxWidth
         )
 
+        val showShareFab = uiState.showsShareFab(profile)
         Column(modifier = Modifier.fillMaxSize()) {
             ProfileTabStrip(
                 uiState = uiState,
@@ -828,23 +827,11 @@ private fun ProfileTabPane(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            val pullState = rememberPullToRefreshState()
-            PullToRefreshBox(
+            AppPullToRefreshBox(
                 isRefreshing = uiState.isRefreshing,
                 onRefresh = rememberRateLimitedRefresh { onAction(ProfileAction.Refresh()) },
-                state = pullState,
-                modifier = Modifier.fillMaxSize(),
-                indicator = {
-                    CustomPullToRefreshIndicator(
-                        isRefreshing = uiState.isRefreshing,
-                        state = pullState,
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(top = 16.dp)
-                    )
-                }
+                modifier = Modifier.fillMaxSize()
             ) {
-                val showShareFab = uiState.showsShareFab(profile)
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
@@ -874,9 +861,9 @@ private fun ProfileTabPane(
                         onOpenRecap = onOpenRecap
                     )
                 }
-
-                if (showShareFab) ProfileShareFab(uiState, onShareStats = onShareStats, onShareFavourites = onShareFavourites)
             }
         }
+        // Kept out of the pull box, which carries everything inside it down with the finger.
+        if (showShareFab) ProfileShareFab(uiState, onShareStats = onShareStats, onShareFavourites = onShareFavourites)
     }
 }

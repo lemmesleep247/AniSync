@@ -406,6 +406,11 @@
     <string name="notification_inbox_mark_read_on_open_desc">Treat opening the inbox as reading everything in it</string>
     <string name="notification_follows">New Followers</string>
     <string name="notification_follows_desc">When someone starts following you</string>
+    <string name="notification_group_media">Media</string>
+    <string name="notification_media_updates">Media Updates</string>
+    <string name="notification_media_updates_desc">New related titles, data changes, merges and removals for titles on your lists</string>
+    <string name="notification_submission_updates">Submission Updates</string>
+    <string name="notification_submission_updates_desc">When AniList accepts or declines a data submission you sent</string>
     <string name="notification_channel_watching">Watching List</string>
     <string name="notification_channel_watching_desc">New episodes for shows you\'re watching</string>
     <string name="notification_channel_planning">Planning List</string>
@@ -523,6 +528,8 @@
     <string name="settings_acknowledgments_desc">Thanks to contributors and libraries</string>
     <string name="settings_anilist_api">Powered by AniList</string>
     <string name="settings_anilist_api_desc">Data provided by AniList GraphQL API</string>
+    <string name="about_community_guidelines">Community guidelines</string>
+    <string name="about_community_guidelines_desc">AniList\'s rules for posts, comments and profiles</string>
     <string name="search_settings">Search settings</string>
     <string name="clear_search">Clear search</string>
     <string name="no_settings_found">No settings found</string>
@@ -624,6 +631,7 @@
     <string name="clip_label_external_link">External link (%1$s)</string>
     <string name="control_log_out">Log Out</string>
     <string name="profile_level">Level %1$d</string>
+    <string name="donator_badge_default">Donator</string>
     <string name="profile_joined">Joined %1$s</string>
     <string name="profile_active">Active %1$s</string>
     <string name="notifications_title">Notifications</string>
@@ -651,6 +659,7 @@
     <string name="profile_edit">Edit Profile</string>
     <string name="profile_unknown_error">Something went wrong while loading your profile.</string>
     <string name="profile_user_load_error">We could not load this user profile right now. The account may be private, unavailable or temporarily rate-limited.</string>
+    <string name="profile_user_unavailable">This profile is private or no longer exists.</string>
     <string name="profile_rate_limited_error">AniList is limiting requests right now. Wait a moment, then try again.</string>
     <string name="profile_tab_overview">Overview</string>
     <string name="profile_tab_activity">Activity</string>
@@ -1100,6 +1109,7 @@
     <string name="activity_detail_replies">Replies (%d)</string>
     <string name="activity_detail_no_replies">No replies yet</string>
     <string name="activity_detail_private">Private</string>
+    <string name="activity_unavailable">This activity is private or was deleted.</string>
     <string name="activity_detail_wrote_to">%1$s wrote to %2$s</string>
     <string name="activity_last_reply">%1$s replied %2$s</string>
     <string name="activity_open_on_anilist">Open on AniList</string>
@@ -1130,6 +1140,9 @@
     <string name="richtext_format_code">Code</string>
     <string name="richtext_format_link">Link</string>
     <string name="richtext_format_spoiler">Spoiler</string>
+    <string name="cd_richtext_spoiler_hide">Hide spoiler</string>
+    <string name="cd_richtext_spoiler_show">Show spoiler</string>
+    <string name="richtext_spoiler_hidden">%1$s, tap to view</string>
     <string name="richtext_char_count">%1$d / %2$d</string>
     <string name="forum_categories_title">Categories</string>
     <string name="forum_add_categories">Add Categories</string>
@@ -1922,6 +1935,7 @@
     <string name="ok">OK</string>
     <string name="session_expired_title">Session Expired</string>
     <string name="session_expired_message">Your session has expired. Please log in again to continue using AniSync.</string>
+    <string name="session_expired_switched">Your session for %1$s has expired, so AniSync switched to %2$s. To use %1$s again, sign in from the account switcher on your profile.</string>
     <!-- Filter sheets -->
     <string name="reset">Reset</string>
     <string name="search_tags_hint">Search tags</string>
@@ -2113,6 +2127,7 @@
     <string name="api_error_deferred">Waiting for the request budget to recover.</string>
     <string name="api_error_session_expired">Your session has expired. Please log in again.</string>
     <string name="api_error_token_rejected">This account needs to be signed in again.</string>
+    <string name="api_error_session_changed">The account changed before this finished.</string>
     <string name="api_error_permission_denied">You don\'t have permission to do that.</string>
     <string name="api_error_server">Server error (%1$d). Please try again later.</string>
     <string name="api_error_offline">No internet connection. Check your network and try again.</string>
@@ -2208,6 +2223,7 @@
     <string name="library_filter_chip_count">%1$s · %2$d</string>
     <string name="library_episodes_behind_short">%1$d behind</string>
     <string name="library_progress_out">%1$d / %2$d out</string>
+    <string name="library_progress_changed_elsewhere">Progress was changed elsewhere and is now %1$d</string>
     <string name="library_lists_title">Your lists</string>
     <string name="library_lists_caption">Drag to reorder. Hide a list to drop it from the rail.</string>
     <string name="library_new_list">New list</string>

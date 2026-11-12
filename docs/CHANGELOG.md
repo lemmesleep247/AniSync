@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.4.0] - 2026-11-11
+
 ### Added
 
 - **Recaps** - Every month you watch anime in gets a recap on the 1st of the next one, and every year one on 1 January, counted on the phone from your list activity and ranked by the time you spent. Each plays as a story: time watched, your top titles, genres, your biggest day, longest streak and busiest weekday, the month's manga, and for a year the busiest month and the shows you kept up with while they aired. The story plays the opening or ending of your top title from AnimeThemes, every page shares as an image, and the Share Studio offers each page of the story beside the recap's card. A new recap comes with a notification that has Watch and Share card, a banner at the top of Library for a week, and a New mark under Statistics, where a Recaps view on your own profile keeps the past ones.
@@ -22,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **18+ Options** - With adult content on, the AniList options show the three switches AniList added under it: 18+ titles in search, 18+ titles in quick search, and other people's 18+ activity. Discover search follows the first, the title pickers in threads, recommendations and filters follow the second, and the feed and other people's profiles follow the third. Turning adult content on turns all three back on, as AniList does.
 - **Submission Updates** - Notifications say when AniList accepts, partly accepts or rejects a title, staff or character submission you made, with the reviewer's note, and they have a Submissions filter of their own.
 - **Open On Profile** - Open on, under General and in the first-run setup, can pin the app to your profile.
+- **Media Alerts** - Notifications can ping you for media updates, the new related titles, data changes, merges and removals AniList sends about titles on your lists, and for the outcome of data submissions you sent. Each has its own switch in a new Media section of the notification settings. Only updates that arrive after you install this version are pushed, so the older ones stay in the inbox.
+- **Rewatch Count** - A title you rewatched or reread says how many times on its Library cover, beside the notes and priority marks.
+- **Donator Badges** - Activities, forum threads and comments, and users in search carry AniList's donator badge beside the name, by the website's rules: Donator for the first three tiers, the donator's own text from the fourth, and the colour cycle from the fifth. A serving moderator's search result shows none, as on the website.
+- **Community Guidelines** - About links to AniList's community guidelines.
 
 ### Changed
 
@@ -37,6 +43,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Emoji** - Emoji in statuses, messages, replies, forum posts, reviews, bios and notes go to AniList as they are, now that it stores them, and every limit counts an emoji as one character, as AniList does. That makes a lone emoji too short for a reply or a message, as it is on the website.
 - **Keeping Up** - Your lists refresh in the background when AniSync comes back after ten minutes or more, and a title's page checks your entry with AniList each time it opens, so episodes and chapters logged on the website or in another app show up without a pull to refresh. (#165)
 - **Search Field** - Discover, Library and Forum search move the search field out of the way as the results scroll down and bring it back on the first scroll up, as the bar over Discover does. The filters and the rail stay on screen, and the keyboard closes as the field leaves.
+- **Back To Search Results** - Opening a result from Discover, Library or Forum search leaves the search open behind it, so back returns to the results as you left them, scrolled to the same place and with the keyboard closed. On a tablet, Library and Forum search stay in the list pane and open what you pick in the pane beside them. (#175)
+- **Pull To Refresh** - A pull only starts when your finger lands with the page already at the top, so scrolling back up never refreshes by accident. The page follows your finger and the loading indicator grows in the space it opens, turning from a circle into a burst as it fills, with a tick once letting go will refresh. Pushing back above that point calls it off. While the refresh runs the page springs back and the indicator stays at the top, cycling through its shapes until the new data is in. (#182)
+- **Spoilers** - Spoilers open and close where AniList's website says they do, nested and unmatched markers included. A spoiler in the middle of a sentence stays in the sentence as a stretch you tap, and one written with a label in braces, such as `~!{Episode 12} text!~`, shows the label while it is shut. An open spoiler keeps a faint outline, so you can see where it ends.
+- **Spoiler Button** - With several lines selected, the spoiler button puts its markers on lines of their own, which AniList needs to hide them as one block.
+- **Profile Donator Badge** - The badge on a profile shows the donator's own text and cycles through AniList's colours the way the website does.
+- **Private Profiles** - A profile or activity that is private or was deleted says so, where it showed a general error before.
 
 ### Fixed
 
@@ -51,12 +63,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Thread Body** - A new thread needs a body of at least 10 characters, which AniList requires, instead of failing when it is sent.
 - **List Notes** - Notes stop at 6000 characters and rewatches at 1000, the most AniList accepts.
 - **Scoring System** - Library scores switch to a new scoring system a few seconds after it is picked, where they kept the old numbers until the list was refreshed. Editing a score in between could save it on the wrong scale.
-- **Editing Entries** - The edit sheet, on a title's page or in the Library, opens on your entry as AniList has it. It could open on an older copy, missing progress and dates logged on the website or in another app since, and saving it sent that older progress back to AniList. A title on your list that the library had not loaded yet opened as a blank new entry, and saving that overwrote the real one. (#165)
-- **Switching Accounts** - A title's page no longer shows the previous account's status and progress on a title the new account has not added.
+- **Editing Entries** - The edit sheet, on a title's page or in the Library, opens on your entry as AniList has it. It could open on an older copy, missing progress and dates logged on the website or in another app since, and saving it sent that older progress back to AniList. A title on your list that the library had not loaded yet opened as a blank new entry, and saving that overwrote the real one. The sheet now checks with AniList first even when the page still shows Add to list, and picking a status there, adding to Planning from Discover or to Watching from a notification keeps the progress AniList already has. (#133, #165)
+- **Switching Accounts** - A title's page no longer shows the previous account's status and progress on a title the new account has not added. Switching while a list was still syncing could fill the new account's library with the previous account's list, and a change still waiting on the request budget could go out as the new account. Anything that answers after the switch is now set aside, and the sync starts over for the account switched to.
+- **Expired Sessions** - When the session of one of several signed-in accounts expires, for example after a password change, AniSync switches to another signed-in account and says which one expired. It used to drop to the sign-in screen as if every account had signed out, with a second notice on top, and an app left there picks the signed-in account again when it opens.
 - **Coming Back To The Feed** - Going back to the feed from an activity's replies, a profile or a title keeps your place. It used to swap everything loaded for the first page and drop you near the top. New activity goes on top for the pill to offer, and when more than a page of it came in, the pill reloads the feed instead. (#164)
 - **Coming Back To A Profile** - Going back to a profile keeps your place in its activity, social, reviews, stats and list tabs. After a minute on the page, coming back cut the paged lists to their first page and swapped the others for a spinner. Saving an edited status or message, in the feed or on a profile, updates it where it is instead of reloading the list, and a page you come back to below its tabs keeps them pinned at the top. (#164)
 - **Muted Notifications** - Notifications muted in the phone's settings stay silent when they stack. Once two or more were showing, the stack took the sound and settings of activity replies, whatever type they were. (#170)
 - **Search Rail** - Results in Discover and Library search stop a little short of the rail above them as they scroll, as they do under the rail on Discover, instead of running right up against it.
+- **Lists On A Tablet** - Opening the first title beside the Library or Discover list no longer starts the list over, so it keeps its place and anything open on it.
+- **Spoilers In Previews** - Notifications, forum comment cards on a profile and Activity History no longer show what is inside a spoiler.
+- **Saving Entries** - Saving an entry sends AniList only what you changed in the sheet, so progress, a score or notes changed on the website or in another app while it was open are kept.
+- **+1 Progress** - A +1 checks the title with AniList first. When the progress moved on elsewhere, the count takes AniList's number and says so instead of overwriting it, and a +1 AniList turns down goes back to where it started.
+- **Add To Watching From A Notification** - Add to Watching on an airing notification adds the title to the account the notification was for, even when another account is active.
+- **Activity History** - On the days the clocks change, a day in Activity History lists the same activities AniList counted into its bar.
+- **Empty Notifications** - The "No notifications" message sits in the middle of the screen. (#183)
+- **Clearing A Biography** - A biography can be emptied and saved, where the editor asked for at least one character. (#177)
+- **Joined Date** - The Joined label on a profile is translated with the rest of the app. (#176)
+- **Character Pages** - The filter bars on a character's page scroll sideways like the rest of the app, so long tab names are no longer cut off. (#172)
+- **Airing Timeline** - The NOW marker fits the whole word in languages where it is longer, and sits on the timeline instead of just below it. (#168)
 
 ## [3.3.0] - 2026-10-20
 

@@ -1,11 +1,13 @@
 package com.anisync.android.presentation.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -32,7 +34,9 @@ import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -49,10 +53,12 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -60,6 +66,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.LinkInteractionListener
@@ -467,7 +474,8 @@ private fun RenderSingleBlock(
                         linkColor = linkColor,
                         codeBackground = codeBackground,
                         headingKind = block.kind,
-                        linkListener = linkListener
+                        linkListener = linkListener,
+                        spoilers = rememberInlineSpoilers(block, spoilerColor)
                     )
                     val textStyle = block.kind.withHeadingLineHeight(style).copy(color = color)
                     Text(
@@ -524,7 +532,8 @@ private fun RenderSingleBlock(
                                         linkColor = linkColor,
                                         codeBackground = codeBackground,
                                         headingKind = child.kind,
-                                        linkListener = linkListener
+                                        linkListener = linkListener,
+                                        spoilers = rememberInlineSpoilers(child, spoilerColor)
                                     )
                                     Text(
                                         text = render.text,
@@ -702,26 +711,53 @@ private fun RenderSingleBlock(
 
                 is RichTextBlock.Spoiler -> {
                     var revealed by remember { mutableStateOf(false) }
+                    val shape = RoundedCornerShape(8.dp)
+                    val label = block.label ?: stringResource(R.string.richtext_format_spoiler)
+                    val angle by animateFloatAsState(
+                        targetValue = if (revealed) 180f else 0f,
+                        label = "spoiler_chevron"
+                    )
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(shape)
                             .background(spoilerColor.copy(alpha = if (revealed) 0.05f else 0.15f))
+                            .then(
+                                // Open, the box keeps an edge so it is clear where the spoiler ends.
+                                if (revealed) Modifier.border(1.dp, spoilerColor.copy(alpha = 0.2f), shape)
+                                else Modifier
+                            )
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { revealed = !revealed }
+                                .clickable(
+                                    role = Role.Button,
+                                    onClickLabel = stringResource(
+                                        if (revealed) R.string.cd_richtext_spoiler_hide
+                                        else R.string.cd_richtext_spoiler_show
+                                    )
+                                ) { revealed = !revealed }
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = if (revealed) "Spoiler" else "Spoiler, click to view",
+                                text = if (revealed) label else stringResource(R.string.richtext_spoiler_hidden, label),
                                 style = style.copy(
                                     color = spoilerColor.copy(alpha = 0.8f),
                                     fontStyle = FontStyle.Italic,
                                     fontWeight = FontWeight.SemiBold
-                                )
+                                ),
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(
+                                imageVector = Icons.Rounded.ExpandMore,
+                                contentDescription = null,
+                                tint = spoilerColor.copy(alpha = 0.8f),
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .graphicsLayer { rotationZ = angle }
                             )
                         }
                         AnimatedVisibility(
@@ -1142,6 +1178,7 @@ private fun List<RichTextInline>.bindInlineImagesToText(): List<RichTextInline> 
             is RichTextInline.BoldItalic -> RichTextInline.BoldItalic(inline.children.bindInlineImagesToText())
             is RichTextInline.Strikethrough -> RichTextInline.Strikethrough(inline.children.bindInlineImagesToText())
             is RichTextInline.Link -> RichTextInline.Link(inline.url, inline.children.bindInlineImagesToText())
+            is RichTextInline.Spoiler -> RichTextInline.Spoiler(inline.label, inline.children.bindInlineImagesToText())
             else -> inline
         }
         if (processed is RichTextInline.Image && result.isNotEmpty()) {
@@ -1173,13 +1210,74 @@ private fun RichTextInline.withNonBreakingTrailingSpace(): RichTextInline = when
     else -> this
 }
 
+/**
+ * Which inline spoilers of one text block are open, and how both states look. They are numbered in
+ * reading order while the text is built, hidden ones' nested spoilers included, so a number keeps
+ * pointing at the same spoiler whatever opens around it.
+ */
+private class InlineSpoilers(
+    private val open: SnapshotStateMap<Int, Boolean>,
+    val hiddenStyle: SpanStyle,
+    val shownStyle: SpanStyle,
+    val hideTint: Color,
+    val defaultLabel: String,
+    val hideLabel: String
+) {
+    private var next = 0
+
+    fun claim(): Int = next++
+
+    fun isOpen(index: Int): Boolean = open[index] == true
+
+    fun toggle(index: Int) {
+        open[index] = !isOpen(index)
+    }
+
+    /** Numbers the spoilers inside one that stays shut, without drawing them. */
+    fun skip(inlines: List<RichTextInline>) {
+        for (inline in inlines) {
+            when (inline) {
+                is RichTextInline.Spoiler -> {
+                    claim()
+                    skip(inline.children)
+                }
+                is RichTextInline.Bold -> skip(inline.children)
+                is RichTextInline.Italic -> skip(inline.children)
+                is RichTextInline.BoldItalic -> skip(inline.children)
+                is RichTextInline.Strikethrough -> skip(inline.children)
+                is RichTextInline.Link -> skip(inline.children)
+                else -> Unit
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberInlineSpoilers(key: Any, spoilerColor: Color): InlineSpoilers {
+    val open = remember(key) { mutableStateMapOf<Int, Boolean>() }
+    return InlineSpoilers(
+        open = open,
+        hiddenStyle = SpanStyle(
+            color = spoilerColor.copy(alpha = 0.8f),
+            background = spoilerColor.copy(alpha = 0.15f),
+            fontStyle = FontStyle.Italic,
+            fontWeight = FontWeight.SemiBold
+        ),
+        shownStyle = SpanStyle(background = spoilerColor.copy(alpha = 0.05f)),
+        hideTint = spoilerColor.copy(alpha = 0.8f),
+        defaultLabel = stringResource(R.string.richtext_format_spoiler),
+        hideLabel = stringResource(R.string.cd_richtext_spoiler_hide)
+    )
+}
+
 private fun List<RichTextInline>.toRichInlineText(
     baseStyle: TextStyle,
     baseColor: Color,
     linkColor: Color,
     codeBackground: Color,
     headingKind: RichTextTextKind,
-    linkListener: LinkInteractionListener
+    linkListener: LinkInteractionListener,
+    spoilers: InlineSpoilers
 ): RichInlineText {
     val inlineContent = LinkedHashMap<String, InlineTextContent>()
     val prepared = bindInlineImagesToText()
@@ -1191,7 +1289,8 @@ private fun List<RichTextInline>.toRichInlineText(
                 linkColor = linkColor,
                 codeBackground = codeBackground,
                 linkListener = linkListener,
-                inlineContent = inlineContent
+                inlineContent = inlineContent,
+                spoilers = spoilers
             )
         }
     }
@@ -1204,18 +1303,19 @@ private fun AnnotatedString.Builder.appendInlines(
     linkColor: Color,
     codeBackground: Color,
     linkListener: LinkInteractionListener,
-    inlineContent: MutableMap<String, InlineTextContent>
+    inlineContent: MutableMap<String, InlineTextContent>,
+    spoilers: InlineSpoilers
 ) {
     for (inline in inlines) {
         when (inline) {
             is RichTextInline.Text -> append(inline.value)
             is RichTextInline.LineBreak -> append("\n")
             is RichTextInline.Bold -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
-                appendInlines(inline.children, baseColor, linkColor, codeBackground, linkListener, inlineContent)
+                appendInlines(inline.children, baseColor, linkColor, codeBackground, linkListener, inlineContent, spoilers)
             }
 
             is RichTextInline.Italic -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
-                appendInlines(inline.children, baseColor, linkColor, codeBackground, linkListener, inlineContent)
+                appendInlines(inline.children, baseColor, linkColor, codeBackground, linkListener, inlineContent, spoilers)
             }
 
             is RichTextInline.BoldItalic -> withStyle(
@@ -1224,13 +1324,54 @@ private fun AnnotatedString.Builder.appendInlines(
                     fontStyle = FontStyle.Italic
                 )
             ) {
-                appendInlines(inline.children, baseColor, linkColor, codeBackground, linkListener, inlineContent)
+                appendInlines(inline.children, baseColor, linkColor, codeBackground, linkListener, inlineContent, spoilers)
             }
 
             is RichTextInline.Strikethrough -> withStyle(
                 SpanStyle(textDecoration = TextDecoration.LineThrough)
             ) {
-                appendInlines(inline.children, baseColor, linkColor, codeBackground, linkListener, inlineContent)
+                appendInlines(inline.children, baseColor, linkColor, codeBackground, linkListener, inlineContent, spoilers)
+            }
+
+            is RichTextInline.Spoiler -> {
+                val index = spoilers.claim()
+                if (spoilers.isOpen(index)) {
+                    withStyle(spoilers.shownStyle) {
+                        appendInlines(inline.children, baseColor, linkColor, codeBackground, linkListener, inlineContent, spoilers)
+                    }
+                    // A tap on the open text belongs to its links, so shutting it again gets a mark of its own.
+                    val id = "spoiler-hide-$index"
+                    inlineContent[id] = InlineTextContent(
+                        Placeholder(
+                            width = 18.sp,
+                            height = 18.sp,
+                            placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.VisibilityOff,
+                            contentDescription = spoilers.hideLabel,
+                            tint = spoilers.hideTint,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape)
+                                .clickable(role = Role.Button) { spoilers.toggle(index) }
+                                .padding(2.dp)
+                        )
+                    }
+                    appendInlineContent(id, " ")
+                } else {
+                    spoilers.skip(inline.children)
+                    pushLink(
+                        LinkAnnotation.Clickable(
+                            tag = "spoiler-$index",
+                            styles = TextLinkStyles(style = spoilers.hiddenStyle),
+                            linkInteractionListener = { spoilers.toggle(index) }
+                        )
+                    )
+                    append(" ${inline.label ?: spoilers.defaultLabel} ")
+                    pop()
+                }
             }
 
             is RichTextInline.Link -> {
@@ -1254,7 +1395,7 @@ private fun AnnotatedString.Builder.appendInlines(
                         linkInteractionListener = linkListener
                     )
                 )
-                appendInlines(inline.children, baseColor, linkColor, codeBackground, linkListener, inlineContent)
+                appendInlines(inline.children, baseColor, linkColor, codeBackground, linkListener, inlineContent, spoilers)
                 pop()
             }
 

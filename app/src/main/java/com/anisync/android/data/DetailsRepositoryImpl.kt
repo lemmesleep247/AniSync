@@ -102,6 +102,14 @@ private fun formatFuzzyDateShort(month: Int?, day: Int?, year: Int?): String? {
     }
 }
 
+/** Sends [progress] only when there is one to set, so a status change never overwrites it. */
+internal fun listStatusMutation(mediaId: Int, status: LibraryStatus, progress: Int?) =
+    SaveMediaListEntryMutation(
+        mediaId = Optional.present(mediaId),
+        status = Optional.present(status.toApiStatus()),
+        progress = Optional.presentIfNotNull(progress)
+    )
+
 class DetailsRepositoryImpl @Inject constructor(
     private val apolloClient: ApolloClient,
     private val mediaDetailsDao: MediaDetailsDao,
@@ -131,7 +139,10 @@ class DetailsRepositoryImpl @Inject constructor(
 
             val media = response.data?.Media ?: throw Exception("Media not found")
 
-            val listEntry = media.mediaListEntry?.viewerListEntryFields
+            // After a switch while this was out, the entry it carries can belong to either account,
+            // so neither the page's copy nor the library row takes it.
+            val sameAccount = owner != null && accountStore.activeAccount.value?.id == owner
+            val listEntry = media.mediaListEntry?.viewerListEntryFields?.takeIf { sameAccount }
             val listStatus = listEntry?.status?.toDomainStatus()
 
             val characters = media.characters?.edges?.filterNotNull()?.map { edge ->
@@ -354,7 +365,7 @@ class DetailsRepositoryImpl @Inject constructor(
             )
 
             mediaDetailsDao.insert(details.toEntity())
-            if (owner != null) {
+            if (owner != null && sameAccount) {
                 syncLibraryEntry(owner, media.toLibraryEntry(), rowWhenAsked, listEntry, askedAt)
             }
         }
@@ -442,7 +453,12 @@ class DetailsRepositoryImpl @Inject constructor(
         return if (stale) refreshMediaDetails(id) else Result.Success(Unit)
     }
 
-    override suspend fun refreshListEntryIfStale(mediaId: Int): Result<Unit> {
+    override suspend fun refreshListEntryIfStale(mediaId: Int): Result<Unit> =
+        refreshListEntry(mediaId, LIST_ENTRY_RECHECK_MS)
+
+    override suspend fun checkListEntry(mediaId: Int): Result<Unit> = refreshListEntry(mediaId, maxAgeMs = 0L)
+
+    private suspend fun refreshListEntry(mediaId: Int, maxAgeMs: Long): Result<Unit> {
         val owner = accountStore.activeAccount.value?.id ?: return Result.Success(Unit)
         val local = libraryDao.getEntry(owner, mediaId) ?: return Result.Success(Unit)
         // A details fetch carries the entry too, so it counts as a check.
@@ -451,7 +467,7 @@ class DetailsRepositoryImpl @Inject constructor(
             refreshTimes.entryCheckedAt(owner, mediaId) ?: 0L,
             mediaDetailsDao.getById(mediaId)?.lastUpdated ?: 0L
         )
-        if (System.currentTimeMillis() - checkedAt < LIST_ENTRY_RECHECK_MS) return Result.Success(Unit)
+        if (System.currentTimeMillis() - checkedAt < maxAgeMs) return Result.Success(Unit)
 
         return safeApiCall {
             val askedAt = System.currentTimeMillis()
@@ -461,6 +477,7 @@ class DetailsRepositoryImpl @Inject constructor(
                 .execute()
                 .dataOrThrow()
                 .Media ?: return@safeApiCall
+            if (accountStore.activeAccount.value?.id != owner) return@safeApiCall
             syncLibraryEntry(owner, local.toDomain(), local, media.mediaListEntry?.viewerListEntryFields, askedAt)
         }
     }
@@ -480,18 +497,10 @@ class DetailsRepositoryImpl @Inject constructor(
     override suspend fun updateMediaListEntry(
         mediaId: Int,
         status: LibraryStatus,
-        progress: Int
+        progress: Int?
     ): Result<Unit> {
         return safeApiCall {
-            val apiStatus = status.toApiStatus()
-
-            val response = apolloClient.mutation(
-                SaveMediaListEntryMutation(
-                    mediaId = Optional.present(mediaId),
-                    status = Optional.present(apiStatus),
-                    progress = Optional.present(progress)
-                )
-            ).execute()
+            val response = apolloClient.mutation(listStatusMutation(mediaId, status, progress)).execute()
 
             if (response.data?.SaveMediaListEntry != null && !response.hasErrors()) {
                 refreshMediaDetails(mediaId)
@@ -499,7 +508,7 @@ class DetailsRepositoryImpl @Inject constructor(
                 val existingEntry = libraryDao.getEntry(owner, mediaId)
 
                 if (existingEntry != null) {
-                    libraryDao.updateStatusAndProgress(owner, mediaId, status, progress)
+                    libraryDao.updateStatusAndProgress(owner, mediaId, status, progress ?: existingEntry.progress)
                 } else {
                     val savedEntry = response.data?.SaveMediaListEntry
                     val cachedMedia = mediaDetailsDao.getById(mediaId)
@@ -514,7 +523,7 @@ class DetailsRepositoryImpl @Inject constructor(
                             titleNative = cachedMedia.titleNative,
                             titleUserPreferred = cachedMedia.titleUserPreferred,
                             coverUrl = cachedMedia.coverUrl,
-                            progress = progress,
+                            progress = progress ?: savedEntry?.progress ?: 0,
                             totalEpisodes = cachedMedia.episodes,
                             totalChapters = cachedMedia.chapters,
                             totalVolumes = cachedMedia.volumes,

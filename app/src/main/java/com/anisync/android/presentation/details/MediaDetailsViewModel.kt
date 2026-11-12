@@ -12,6 +12,8 @@ import com.anisync.android.data.local.dao.LibraryDao
 import com.anisync.android.data.local.entity.LibraryEntryEntity
 import com.anisync.android.domain.DetailsRepository
 import com.anisync.android.domain.ForumRepository
+import com.anisync.android.presentation.components.alert.ToastType
+import com.anisync.android.presentation.library.progressChangedElsewhere
 import com.anisync.android.domain.ForumThread
 import com.anisync.android.domain.GetMediaDetailsUseCase
 import com.anisync.android.domain.LibraryEntry
@@ -41,6 +43,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 @HiltViewModel
@@ -303,7 +306,8 @@ class MediaDetailsViewModel @Inject constructor(
         }
     }
 
-    fun saveMediaListEntry(status: LibraryStatus, progress: Int) {
+    /** A null [progress] leaves AniList's alone, which a status change from the tracker always does. */
+    fun saveMediaListEntry(status: LibraryStatus, progress: Int? = null) {
         viewModelScope.launch {
             _isSaving.value = true
             val statusBefore = currentListStatus()
@@ -324,7 +328,16 @@ class MediaDetailsViewModel @Inject constructor(
     fun updateProgress(progress: Int) {
         viewModelScope.launch {
             val statusBefore = currentListStatus()
-            if (libraryRepository.getEntry(mediaId) == null) {
+            val row = libraryRepository.getEntry(mediaId)
+            if (row != null) {
+                val elsewhere = progressChangedElsewhere(detailsRepository, libraryRepository, mediaId, row.progress)
+                if (elsewhere != null) {
+                    // The tracker counted from an older row. The page follows the row, so it shows AniList's count.
+                    toastManager.showToast(ToastType.INFO, R.string.library_progress_changed_elsewhere, elsewhere)
+                    return@launch
+                }
+            }
+            if (row == null) {
                 // Not in the local library yet (that list was never fetched), so there is no row
                 // for the library path to update. Same rule as that path: the last one completes it.
                 val details = (uiState.value as? DetailsUiState.Success)?.details
@@ -378,15 +391,25 @@ class MediaDetailsViewModel @Inject constructor(
             val details = (uiState.value as? DetailsUiState.Success)?.details ?: return@launch
 
             var existingEntry = libraryRepository.getEntry(mediaId)
-            if (existingEntry == null && details.listEntryId != null) {
-                // On the list with no library row to edit. A blank draft would save over the real
-                // entry, so fetch it first, which writes the row.
+            if (existingEntry == null) {
+                // No library row to edit. AniList can still have an entry added elsewhere since the
+                // last sync, even while this page shows none, and a blank draft would save over it.
+                // Fetching writes the row.
                 val result = detailsRepository.refreshMediaDetails(mediaId)
                 if (result is Result.Error) {
                     toastManager.showResultError(result)
                     return@launch
                 }
                 existingEntry = libraryRepository.getEntry(mediaId)
+            } else {
+                // The page skips a row synced in the last minute, and a change made elsewhere in
+                // that minute would show here as the old progress. A slow check opens on the row.
+                withTimeoutOrNull(EDITOR_CHECK_TIMEOUT_MS) {
+                    withRequestPriority(RequestPriority.Prefetch) {
+                        detailsRepository.checkListEntry(mediaId)
+                    }
+                }
+                existingEntry = libraryRepository.getEntry(mediaId) ?: existingEntry
             }
             val draft = existingEntry ?: LibraryEntry(
                 id = 0,
@@ -417,9 +440,10 @@ class MediaDetailsViewModel @Inject constructor(
     }
 
     fun saveLibraryEntry(entry: LibraryEntry) {
+        val baseline = _draftEntry.value?.takeIf { it.mediaId == entry.mediaId }
         viewModelScope.launch {
             _isSaving.value = true
-            when (val result = libraryRepository.updateEntry(entry)) {
+            when (val result = libraryRepository.updateEntry(entry, baseline)) {
                 is Result.Success -> {
                     refresh()
                     closeEditSheet()
@@ -529,6 +553,8 @@ class MediaDetailsViewModel @Inject constructor(
 
         /** Asking on the exact instant the window turns over tends to land just before it. */
         private const val RETRY_GRACE_MS = 1_000L
+
+        private const val EDITOR_CHECK_TIMEOUT_MS = 2_000L
     }
 
     fun rateRecommendation(recommendationId: Int, rating: com.anisync.android.type.RecommendationRating) {

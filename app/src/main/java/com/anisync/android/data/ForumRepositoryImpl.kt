@@ -407,6 +407,8 @@ class ForumRepositoryImpl @Inject constructor(
                     authorId = node.user?.id ?: 0,
                     authorName = node.user?.name ?: "Unknown",
                     authorAvatarUrl = node.user?.avatar?.large,
+                    authorDonatorTier = node.user?.donatorTier ?: 0,
+                    authorDonatorBadge = node.user?.donatorBadge,
                     createdAt = (node.createdAt ?: 0).toLong(),
                     siteUrl = node.siteUrl,
                     childComments = children
@@ -429,6 +431,8 @@ class ForumRepositoryImpl @Inject constructor(
                     authorId = (userMap?.get("id") as? Number)?.toInt() ?: 0,
                     authorName = userMap?.get("name") as? String ?: "Unknown",
                     authorAvatarUrl = avatarMap?.get("large") as? String,
+                    authorDonatorTier = (userMap?.get("donatorTier") as? Number)?.toInt() ?: 0,
+                    authorDonatorBadge = userMap?.get("donatorBadge") as? String,
                     createdAt = (node["createdAt"] as? Number)?.toLong() ?: 0L,
                     siteUrl = node["siteUrl"] as? String,
                     childComments = children
@@ -702,6 +706,8 @@ class ForumRepositoryImpl @Inject constructor(
         userId: Int?,
         userName: String?,
         userAvatarLarge: String?,
+        userDonatorTier: Int? = null,
+        userDonatorBadge: String? = null,
         repliedAt: Int? = null,
         replyUserName: String? = null,
         replyUserAvatarLarge: String? = null,
@@ -728,6 +734,8 @@ class ForumRepositoryImpl @Inject constructor(
         authorId = userId ?: 0,
         authorName = userName ?: "Unknown",
         authorAvatarUrl = userAvatarLarge,
+        authorDonatorTier = userDonatorTier ?: 0,
+        authorDonatorBadge = userDonatorBadge,
         repliedAt = repliedAt?.toLong(),
         replyUserName = replyUserName,
         replyUserAvatarUrl = replyUserAvatarLarge,
@@ -805,6 +813,8 @@ class ForumRepositoryImpl @Inject constructor(
         userId = user?.id,
         userName = user?.name,
         userAvatarLarge = user?.avatar?.large,
+        userDonatorTier = user?.donatorTier,
+        userDonatorBadge = user?.donatorBadge,
         repliedAt = repliedAt,
         replyUserName = replyUser?.name,
         replyUserAvatarLarge = replyUser?.avatar?.large,
@@ -830,6 +840,8 @@ class ForumRepositoryImpl @Inject constructor(
         userId = user?.id,
         userName = user?.name,
         userAvatarLarge = user?.avatar?.large,
+        userDonatorTier = user?.donatorTier,
+        userDonatorBadge = user?.donatorBadge,
         createdAt = createdAt,
         siteUrl = siteUrl,
         categories = categories?.filterNotNull()?.map { it.id to it.name })
@@ -842,6 +854,8 @@ class ForumRepositoryImpl @Inject constructor(
         authorId = user?.id ?: 0,
         authorName = user?.name ?: "Unknown",
         authorAvatarUrl = user?.avatar?.large,
+        authorDonatorTier = user?.donatorTier ?: 0,
+        authorDonatorBadge = user?.donatorBadge,
         createdAt = (createdAt ?: 0).toLong(),
         siteUrl = siteUrl
     )
@@ -854,6 +868,8 @@ class ForumRepositoryImpl @Inject constructor(
         authorId = user?.id ?: 0,
         authorName = user?.name ?: "Unknown",
         authorAvatarUrl = user?.avatar?.large,
+        authorDonatorTier = user?.donatorTier ?: 0,
+        authorDonatorBadge = user?.donatorBadge,
         createdAt = (createdAt ?: 0).toLong(),
         siteUrl = siteUrl
     )

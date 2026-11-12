@@ -22,11 +22,10 @@ interface LibraryRepository {
     suspend fun countByStatus(type: MediaType): Map<LibraryStatus, Int>
 
     /**
-     * Trigger a network refresh.
-     * Fetches from API and updates local cache.
-     * Returns Result to indicate success/failure for UI feedback.
+     * Fetches the active account's [type] list and merges it into the local library. When the active
+     * account changes while the list is on its way, the account switched to is fetched instead.
      */
-    suspend fun refreshLibrary(username: String, type: MediaType): Result<Unit>
+    suspend fun refreshLibrary(type: MediaType): Result<Unit>
 
     /**
      * When [refreshLibrary] last brought the active account's [type] list down since the app
@@ -58,9 +57,11 @@ interface LibraryRepository {
     suspend fun getEntry(mediaId: Int): LibraryEntry?
 
     /**
-     * Update an entire entry (score, status, notes, etc).
+     * Saves an edit of [entry]. Only what differs from [baseline], the entry the editor opened on,
+     * goes to AniList, so a change made elsewhere since then survives. Without a baseline the row as
+     * it is now stands in, and a title with no AniList entry yet is saved whole.
      */
-    suspend fun updateEntry(entry: LibraryEntry): Result<Unit>
+    suspend fun updateEntry(entry: LibraryEntry, baseline: LibraryEntry? = null): Result<Unit>
 
     /**
      * Delete an entry from the library.

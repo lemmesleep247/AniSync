@@ -1,6 +1,5 @@
 package com.anisync.android.domain.parser
 
-import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Node
 import org.jsoup.nodes.TextNode
@@ -17,6 +16,25 @@ private val ESCAPED_HTML_TAG_REGEX = Regex("""<[a-zA-Z/][^>]*>""")
 // objective-c, asp.net). Any character outside this set in the token means AniList's fence misparse
 // swallowed real post content there instead, so it must be recovered rather than dropped.
 private val LANGUAGE_TOKEN_REGEX = Regex("""[A-Za-z0-9#+.-]+""")
+
+/**
+ * A `<code class="language-…">` info string normally names a language (e.g. `language-kotlin`).
+ * When AniList's fence parser swallows post content into it (an unclosed/space-less ```` ```<img …> ````
+ * or a `~~~` centre fence opened straight onto its first line), the info string carries real
+ * markup, a URL, or a centred title instead. Returns that swallowed content so the caller can
+ * re-parse it, or null for a genuine language token.
+ */
+internal fun swallowedLanguageContent(codeClass: String): String? {
+    val trimmed = codeClass.trim()
+    if (!trimmed.startsWith("language-")) return null
+    val info = trimmed.removePrefix("language-")
+    if (info.isBlank()) return null
+    // A real language token is a short identifier (kotlin, c++, objective-c). AniList's fence
+    // misparse stuffs real post content here instead — an HTML tag, a bare URL, or markdown/prose
+    // such as a centred italic title (`_Cute Clothes~_`). Anything that isn't a plain language
+    // identifier is recovered so it isn't silently dropped (the centred title used to vanish).
+    return info.takeUnless { LANGUAGE_TOKEN_REGEX.matches(it) }
+}
 private val TRIPLE_TILDE_REGEX = Regex("~~~")
 
 // AniList's asHtml endpoint sometimes dumps an entire rich post — or a rich section of a
@@ -35,8 +53,11 @@ private val NESTED_LIST_TAGS: Set<String> = setOf("ul", "ol")
 private val BLOCK_TAGS: Set<String> = setOf(
     "p", "div", "ul", "ol", "li", "table", "blockquote",
     "h1", "h2", "h3", "h4", "h5", "hr", "pre", "center",
-    "youtube", "video", "iframe"
+    "youtube", "video", "iframe", RichTextSpoilers.BLOCK_TAG
 )
+
+// The website's own spoiler element. Its fallback label is the English word, which says nothing.
+private const val WEBSITE_DEFAULT_LABEL = "Spoiler"
 
 internal class RichTextHtmlParser(
     private val inlineParser: RichTextInlineParser
@@ -199,7 +220,10 @@ internal class RichTextHtmlParser(
                 handleHeading(element, workingCtx, tag[1].digitToInt())
             }
 
-            "spoiler" -> handleSpoilerBlock(element, workingCtx)
+            RichTextSpoilers.BLOCK_TAG ->
+                handleSpoilerBlock(element, workingCtx, element.attr(RichTextSpoilers.LABEL_ATTR))
+            RichTextSpoilers.INLINE_TAG ->
+                handleInlineSpoiler(element, workingCtx, element.attr(RichTextSpoilers.LABEL_ATTR))
             "blockquote" -> handleBlockquote(element, workingCtx)
             "hr" -> {
                 workingCtx.flushText()
@@ -240,10 +264,7 @@ internal class RichTextHtmlParser(
                             swallowed != null -> "~~~\n$withSwallowed\n~~~"
                             else -> withSwallowed
                         }
-                        val reparsed = Jsoup.parseBodyFragment(
-                            RichTextNormalizer.normalize(reparseSource)
-                        ).body()
-                        walkChildren(reparsed, workingCtx)
+                        walkChildren(parseRichTextBody(reparseSource), workingCtx)
                         workingCtx.flushText()
                     } else {
                         workingCtx.emitBlock(
@@ -325,6 +346,8 @@ internal class RichTextHtmlParser(
 
             "br" -> ctx.appendInline(RichTextInline.LineBreak)
             "span" -> handleSpan(element, ctx)
+            RichTextSpoilers.INLINE_TAG ->
+                handleInlineSpoiler(element, ctx, element.attr(RichTextSpoilers.LABEL_ATTR))
             "img" -> {
                 // In an inline context (e.g. an emoji `<img width=20>` after a heading word),
                 // keep an emoji-sized image in the text flow instead of breaking to its own block.
@@ -385,23 +408,66 @@ internal class RichTextHtmlParser(
             else -> block
         }
 
-    private fun handleSpoilerBlock(element: Element, ctx: ParseContext) {
+    private fun handleSpoilerBlock(element: Element, ctx: ParseContext, label: String? = null) {
         ctx.flushText()
         val spoilerCtx = ctx.detached(
             align = ctx.align,
             currentLinkUrl = ctx.currentLinkUrl,
             listDepth = ctx.listDepth
         )
-        walkChildren(element, spoilerCtx)
+        walkChildren(spoilerContent(element), spoilerCtx)
         spoilerCtx.flushText()
         if (spoilerCtx.blocks.isNotEmpty()) {
             ctx.emitBlock(
                 RichTextBlock.Spoiler(
                     children = spoilerCtx.blocks,
-                    align = ctx.align
+                    align = ctx.align,
+                    label = spoilerLabel(label)
                 )
             )
         }
+    }
+
+    private fun handleInlineSpoiler(element: Element, ctx: ParseContext, label: String?) {
+        val spoilerCtx = ctx.detached(
+            align = ctx.align,
+            currentLinkUrl = ctx.currentLinkUrl,
+            listDepth = ctx.listDepth
+        )
+        walkInlineChildren(spoilerContent(element), spoilerCtx)
+        if (spoilerCtx.blocks.isEmpty()) {
+            val inlines = trimEdgeInlineText(spoilerCtx.consumeInlineBufferTrimmed())
+            if (!isBlankInlineList(inlines)) {
+                ctx.appendInline(RichTextInline.Spoiler(spoilerLabel(label), inlines))
+            }
+            return
+        }
+        // A full-size image or a card cannot sit in a line of text, so this one is drawn as a block.
+        spoilerCtx.flushText()
+        ctx.flushText()
+        ctx.emitBlock(
+            RichTextBlock.Spoiler(
+                children = spoilerCtx.blocks,
+                align = ctx.align,
+                label = spoilerLabel(label)
+            )
+        )
+    }
+
+    private fun spoilerLabel(raw: String?): String? =
+        raw?.trim()?.takeIf { it.isNotEmpty() && it != WEBSITE_DEFAULT_LABEL }
+
+    /**
+     * The website's element keeps its content escaped in a `data-content` attribute and only renders
+     * it on a tap, next to a close icon. Read that if it is there, otherwise the element's own children.
+     */
+    private fun spoilerContent(element: Element): Element {
+        if (!element.hasClass("markdown-spoiler")) return element
+        element.children().firstOrNull { it.hasAttr("data-content") }?.let {
+            return parseRichTextBody(it.attr("data-content"))
+        }
+        element.children().filter { it.hasClass("hide-spoiler") }.forEach { it.remove() }
+        return element
     }
 
     private fun handleBlockquote(element: Element, ctx: ParseContext) {
@@ -598,12 +664,24 @@ internal class RichTextHtmlParser(
             return
         }
 
+        if (element.hasClass("markdown-spoiler")) {
+            handleSpoilerBlock(element, ctx, element.attr("data-label"))
+            return
+        }
+
         walkChildren(element, ctx)
     }
 
     private fun handleSpan(element: Element, ctx: ParseContext) {
+        // RichTextSpoilers turns AniList's own spans back into markers, so one only reaches here
+        // when its markup differs from the usual shape.
         if (element.hasClass("markdown_spoiler")) {
             handleSpoilerBlock(element, ctx)
+            return
+        }
+
+        if (element.hasClass("markdown-spoiler")) {
+            handleInlineSpoiler(element, ctx, element.attr("data-label"))
             return
         }
 
@@ -817,25 +895,6 @@ internal class RichTextHtmlParser(
             text.contains("class=\"youtube\"") ||
             text.contains("~!") ||
             text.contains("~~~")
-
-    /**
-     * A `<code class="language-…">` info string normally names a language (e.g. `language-kotlin`).
-     * When AniList's fence parser swallows post content into it (an unclosed/space-less ```` ```<img …> ````
-     * or a `~~~` centre fence opened straight onto its first line), the info string carries real
-     * markup, a URL, or a centred title instead. Returns that swallowed content so the caller can
-     * re-parse it, or null for a genuine language token.
-     */
-    private fun swallowedLanguageContent(codeClass: String): String? {
-        val trimmed = codeClass.trim()
-        if (!trimmed.startsWith("language-")) return null
-        val info = trimmed.removePrefix("language-")
-        if (info.isBlank()) return null
-        // A real language token is a short identifier (kotlin, c++, objective-c). AniList's fence
-        // misparse stuffs real post content here instead — an HTML tag, a bare URL, or markdown/prose
-        // such as a centred italic title (`_Cute Clothes~_`). Anything that isn't a plain language
-        // identifier is recovered so it isn't silently dropped (the centred title used to vanish).
-        return info.takeUnless { LANGUAGE_TOKEN_REGEX.matches(it) }
-    }
 
     /**
      * True when [trimmed] carries a single dangling `~~~` centre fence at its tail. AniList's asHtml

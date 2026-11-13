@@ -73,6 +73,8 @@ class SettingsViewModel @Inject constructor(
     private val toastManager: ToastManager,
     private val rateLimitGate: com.anisync.android.data.network.RateLimitGate,
     rateLimitMonitor: com.anisync.android.data.network.RateLimitMonitor,
+    private val supportPrompt: com.anisync.android.data.SupportPromptStore,
+    supportersRepository: com.anisync.android.domain.SupportersRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -80,6 +82,11 @@ class SettingsViewModel @Inject constructor(
     val rateLimitStats = rateLimitMonitor.stats
 
     val appIcon = appIconManager.current
+
+    /** How many people have left a tip, for the Support AniSync row. */
+    val supporterCount: StateFlow<Int> = supportersRepository.observeSupporters()
+        .map { it.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     /**
      * The pinned budget, or null when the gate is using AniList's real one.
@@ -433,6 +440,8 @@ class SettingsViewModel @Inject constructor(
             }
 
             SettingsAction.FetchLatestRelease -> fetchLatestRelease()
+            SettingsAction.ShowSupportCard -> supportPrompt.show()
+            SettingsAction.ArmSupportCard -> supportPrompt.arm()
 
             is SettingsAction.SetFontAxis -> appSettings.updateTypographyCategory(action.category) {
                 it.withAxis(action.axis, action.value)

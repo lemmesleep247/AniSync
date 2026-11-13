@@ -27,7 +27,8 @@ enum class WhatsNewItem(val sinceVersionCode: Int, val kind: Kind, val place: Pl
     PROFILE_MUTUALS(23, Kind.NEW, Place.PROFILE),
     SETTINGS_RECAPS(23, Kind.NEW),
     PROFILE_STATS_MOVED(23, Kind.MOVED, Place.PROFILE),
-    NOTIFICATIONS_MEDIA(23, Kind.NEW);
+    NOTIFICATIONS_MEDIA(23, Kind.NEW),
+    SETTINGS_SUPPORT(24, Kind.NEW);
 
     enum class Kind { NEW, MOVED }
 
@@ -52,10 +53,7 @@ class WhatsNewStore @Inject constructor(
     private val _active = MutableStateFlow(computeActive())
     val active: StateFlow<Set<WhatsNewItem>> = _active.asStateFlow()
 
-    /**
-     * Records the build this launch runs on. Has to run before [AppSettings.noteAppVersion], which
-     * writes the current build on a fresh install and would make the install read as an update.
-     */
+    /** Records the build this launch runs on. */
     fun noteLaunch(now: Long = System.currentTimeMillis()) {
         val current = BuildConfig.VERSION_CODE
         val running = prefs.getInt(KEY_RUNNING, 0)

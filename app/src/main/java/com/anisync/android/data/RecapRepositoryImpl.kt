@@ -12,10 +12,13 @@ import com.anisync.android.domain.RecapRepository
 import com.anisync.android.domain.Result
 import com.anisync.android.domain.StoredRecap
 import com.anisync.android.domain.recap.ActivityWindow
+import com.anisync.android.domain.recap.FetchedActivity
 import com.anisync.android.domain.recap.FetchedPage
 import com.anisync.android.domain.recap.ListActivityRecord
 import com.anisync.android.domain.recap.Recap
 import com.anisync.android.domain.recap.MAX_ACTIVITY_PAGES
+import com.anisync.android.domain.recap.RecapBuildProgress
+import com.anisync.android.domain.recap.RecapBuildTracker
 import com.anisync.android.domain.recap.RecapMedia
 import com.anisync.android.domain.recap.RecapPeriod
 import com.anisync.android.domain.recap.RecapSettings
@@ -33,6 +36,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -65,11 +69,18 @@ private const val MAX_BUDGET_WAITS = 5
 /** Up to this many missing months are built one by one, more cost less as one sweep of the year. */
 private const val MONTHS_BUILT_ALONE = 2
 
+/** A first build saves the history it has read every this many pages, and whenever it is stopped. */
+private const val PAGES_PER_CHECKPOINT = 10
+
+/** How long a stopped first build's saved history is trusted before the next attempt reads it again. */
+private const val CHECKPOINT_MAX_AGE_MS = 24 * 60 * 60 * 1000L
+
 @Singleton
 class RecapRepositoryImpl @Inject constructor(
     private val remote: RecapRemote,
     private val recapDao: RecapDao,
     private val env: RecapEnvironment,
+    private val checkpoints: RecapCheckpoints,
 ) : RecapRepository {
 
     /** One build at a time, so the worker and an open screen never fetch the same period twice. */
@@ -138,9 +149,9 @@ class RecapRepositoryImpl @Inject constructor(
     override suspend fun monthInProgress(refresh: Boolean): Result<StoredRecap?> =
         getRecap(RecapPeriod.Month(YearMonth.from(today())), refresh)
 
-    override suspend fun backfill(): Result<Unit> = safeApiCall {
+    override suspend fun backfill(onProgress: suspend (RecapBuildProgress) -> Unit): Result<Unit> = safeApiCall {
         val owner = owner() ?: return@safeApiCall
-        buildLock.withLock { backfillIfEmpty(owner, today()) }
+        buildLock.withLock { backfillIfEmpty(owner, today(), onProgress) }
     }
 
     override suspend fun buildDue(monthly: Boolean, yearly: Boolean): Result<List<StoredRecap>> = safeApiCall {
@@ -179,6 +190,7 @@ class RecapRepositoryImpl @Inject constructor(
         // Behind a running build, or the rows it is about to store would come straight back.
         buildLock.withLock {
             recapDao.deleteOwner(owner)
+            checkpoints.clear(owner)
             forget(owner)
         }
     }
@@ -186,6 +198,7 @@ class RecapRepositoryImpl @Inject constructor(
     // No lock: a build for an account that is gone stops at its owner check before storing.
     override suspend fun clearOwner(ownerId: Int) {
         recapDao.deleteOwner(ownerId)
+        checkpoints.clear(ownerId)
         forget(ownerId)
     }
 
@@ -393,20 +406,64 @@ class RecapRepositoryImpl @Inject constructor(
      * Runs the first build before anything else is built from nothing. A period built alone has no
      * lookback, so a completion in it could not see the episodes logged before it. Call under [buildLock].
      */
-    private suspend fun backfillIfEmpty(owner: Int, today: LocalDate) {
-        if (recapDao.getStamps(owner).isEmpty()) backfillLocked(owner, today)
+    private suspend fun backfillIfEmpty(owner: Int, today: LocalDate, onProgress: (suspend (RecapBuildProgress) -> Unit)? = null) {
+        if (recapDao.getStamps(owner).isEmpty()) backfillLocked(owner, today, onProgress)
     }
 
     /** Call under [buildLock]. */
-    private suspend fun backfillLocked(owner: Int, today: LocalDate) {
+    private suspend fun backfillLocked(owner: Int, today: LocalDate, onProgress: (suspend (RecapBuildProgress) -> Unit)? = null) {
         val periods = backfillPeriods(today, env.keptMonths())
         if (periods.isEmpty()) return
         val from = periods.minOf { it.firstDay }.atStartOfDay(zone).toEpochSecond()
-        val to = RecapPeriod.Month(YearMonth.from(today)).window(zone).to
-        val source = storedBefore(owner, from) + fetch(owner, ActivityWindow(from, to))
-        val airing = periods.filterIsInstance<RecapPeriod.Year>().firstOrNull()?.let { airingFor(it, source) }
+        val window = ActivityWindow(from, RecapPeriod.Month(YearMonth.from(today)).window(zone).to)
+        val tracker = onProgress?.let { RecapBuildTracker(window, env.nowMillis() / 1000, zone, it) }
+        val source = storedBefore(owner, from) + typed(readHistory(owner, window, tracker), tracker = tracker)
+        val airing = periods.filterIsInstance<RecapPeriod.Year>().firstOrNull()?.let { airingFor(it, source, tracker = tracker) }
         store(owner, periods, source, today, airing = airing)
         retain(owner, today)
+        checkpoints.clear(owner)
+    }
+
+    /**
+     * Every activity in a first build's [window], carrying on from what a stopped build of the same
+     * window had read. What is read is saved every few pages and when the build stops, so the next
+     * attempt only asks for what was logged after the newest saved activity and before the oldest.
+     */
+    private suspend fun readHistory(owner: Int, window: ActivityWindow, tracker: RecapBuildTracker?): List<FetchedActivity> {
+        val saved = checkpoints.load(owner)?.takeIf {
+            it.from == window.from && it.activities.isNotEmpty() && env.nowMillis() - it.savedAt in 0 until CHECKPOINT_MAX_AGE_MS
+        }
+        val read = LinkedHashMap<Int, FetchedActivity>()
+        var complete = false
+        var unsaved = 0
+        suspend fun save() {
+            checkpoints.save(owner, RecapCheckpoint(window.from, env.nowMillis(), complete, read.values.toList()))
+            unsaved = 0
+        }
+        suspend fun readAll(part: ActivityWindow) {
+            readActivityWindow(part) { sub, page ->
+                fetchActivityPage(owner, sub, page, tally = null).also { result ->
+                    result.activities.forEach { read.putIfAbsent(it.id, it) }
+                    tracker?.onPage(result)
+                    if (++unsaved >= PAGES_PER_CHECKPOINT) save()
+                }
+            }
+        }
+        try {
+            if (saved == null) {
+                readAll(window)
+            } else {
+                saved.activities.forEach { read[it.id] = it }
+                tracker?.onRead(saved.activities)
+                readAll(ActivityWindow(saved.activities.maxOf { it.createdAt }, window.to))
+                if (!saved.complete) window.endingAt(saved.activities.minOf { it.createdAt })?.let { readAll(it) }
+            }
+            complete = true
+        } finally {
+            // A stopped worker is cancelled, and the save has to outlive that.
+            if (read.isNotEmpty()) withContext(NonCancellable) { runCatching { save() } }
+        }
+        return read.values.toList()
     }
 
     /**
@@ -485,11 +542,14 @@ class RecapRepositoryImpl @Inject constructor(
     }
 
     /** Every countable activity in [window], typed through its title. */
-    private suspend fun fetch(userId: Int, window: ActivityWindow, tally: Tally? = null): Source {
-        val activities = readActivityWindow(window) { part, page -> fetchActivityPage(userId, part, page, tally) }
-            .filter { isCountable(it.status) }
-        val media = fetchMedia(activities.mapTo(LinkedHashSet()) { it.mediaId }, tally)
-        val records = activities.mapNotNull { activity ->
+    private suspend fun fetch(userId: Int, window: ActivityWindow, tally: Tally? = null): Source =
+        typed(readActivityWindow(window) { part, page -> fetchActivityPage(userId, part, page, tally) }, tally)
+
+    /** The countable [activities], typed through their titles. */
+    private suspend fun typed(activities: List<FetchedActivity>, tally: Tally? = null, tracker: RecapBuildTracker? = null): Source {
+        val countable = activities.filter { isCountable(it.status) }
+        val media = fetchMedia(countable.mapTo(LinkedHashSet()) { it.mediaId }, tally, tracker)
+        val records = countable.mapNotNull { activity ->
             media[activity.mediaId]?.let {
                 ListActivityRecord(activity.id, activity.mediaId, it.type, activity.status, activity.progress, activity.createdAt)
             }
@@ -506,14 +566,17 @@ class RecapRepositoryImpl @Inject constructor(
         return result
     }
 
-    private suspend fun fetchMedia(ids: Collection<Int>, tally: Tally?): Map<Int, RecapMedia> {
+    private suspend fun fetchMedia(ids: Collection<Int>, tally: Tally?, tracker: RecapBuildTracker?): Map<Int, RecapMedia> {
         val media = HashMap<Int, RecapMedia>(ids.size)
-        for (batch in ids.chunked(MEDIA_BATCH_SIZE)) {
+        val batches = ids.chunked(MEDIA_BATCH_SIZE)
+        tracker?.onTitles(0, batches.size)
+        for ((index, batch) in batches.withIndex()) {
             val titles = paced {
                 tally?.let { it.requests++ }
                 remote.media(batch)
             }
             titles.forEach { media[it.id] = it }
+            tracker?.onTitles(index + 1, batches.size)
         }
         return media
     }
@@ -524,14 +587,21 @@ class RecapRepositoryImpl @Inject constructor(
         source: Source,
         zone: ZoneId = this.zone,
         tally: Tally? = null,
+        tracker: RecapBuildTracker? = null,
     ): Map<Int, Map<Int, Long>> {
         val ids = keptUpCandidates(year, zone, source.records, source.media)
-        return fetchAiring(ids, year.window(zone), tally)
+        return fetchAiring(ids, year.window(zone), tally, tracker)
     }
 
-    private suspend fun fetchAiring(ids: Collection<Int>, window: ActivityWindow, tally: Tally?): Map<Int, Map<Int, Long>> {
+    private suspend fun fetchAiring(
+        ids: Collection<Int>,
+        window: ActivityWindow,
+        tally: Tally?,
+        tracker: RecapBuildTracker?,
+    ): Map<Int, Map<Int, Long>> {
         val airing = HashMap<Int, MutableMap<Int, Long>>()
-        for (batch in ids.chunked(MEDIA_BATCH_SIZE)) {
+        val batches = ids.chunked(MEDIA_BATCH_SIZE)
+        for ((index, batch) in batches.withIndex()) {
             var page = 1
             while (page <= MAX_ACTIVITY_PAGES) {
                 val result = paced {
@@ -542,6 +612,7 @@ class RecapRepositoryImpl @Inject constructor(
                 if (!result.hasNextPage) break
                 page++
             }
+            tracker?.onAiring(index + 1, batches.size)
         }
         return airing
     }
